@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vital Signs — Sprint 36 Progress Update</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --blue: #0076C0;
+      --blue-dk: #005287;
+      --tint: #F4F8FA;
+      --bg: #F5F7F9;
+      --paper: #FFFFFF;
+      --txt: #2A2C2F;
+      --txt2: #788187;
+      --bdr: #D5DCE1;
+      --grn: #1b6e2a;
+      --grn-bg: #edf7ee;
+      --org: #c45000;
+      --org-bg: #fff4eb;
+      --grad: linear-gradient(90deg, #7B0CEA -16.94%, #128ADF 52.91%, #0EBFCA 123.39%);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: var(--txt);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header bar (matches portal) ── */
+    .header-bar {
+      background: var(--paper);
+      border-bottom: 1px solid var(--bdr);
+      padding: 12px 32px;
+      display: flex;
+      align-items: center;
+    }
+    .header-bar svg { height: 32px; width: auto; }
+    .header-logo {
+      font-size: .95rem; font-weight: 800; color: var(--blue);
+      letter-spacing: -.01em;
+    }
+    .header-logo span { font-weight: 500; color: var(--txt2); }
+
+    /* ── Hero banner ── */
+    .hero-wrap {
+      padding: 28px 4% 0;
+    }
+    .hero {
+      background: var(--grad);
+      border-radius: 40px;
+      color: #fff;
+      padding: 44px 40px;
+      text-align: center;
+      box-shadow: 0 0 0 10px var(--bg);
+    }
+    .hero-label {
+      font-size: .6rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .15em;
+      opacity: .6; margin-bottom: 8px;
+    }
+    .hero h1 { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; }
+    .hero .sub { margin-top: 6px; font-size: .88rem; opacity: .7; font-weight: 500; }
+    .hero .rollout {
+      display: inline-block; margin-top: 14px;
+      background: rgba(255,255,255,.15); border-radius: 20px;
+      padding: 6px 18px; font-size: .72rem; font-weight: 700;
+      letter-spacing: .04em; backdrop-filter: blur(4px);
+    }
+
+    /* ── Content ── */
+    .wrap { max-width: 780px; margin: 0 auto; padding: 0 24px 48px; }
+
+    .sec { padding-top: 40px; }
+    .sec-label {
+      font-size: .58rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .13em; color: var(--blue); margin-bottom: 4px;
+    }
+    .sec-title {
+      font-size: 1.2rem; font-weight: 800; line-height: 1.3; margin-bottom: 16px;
+    }
+
+    .bl { list-style: none; margin-bottom: 16px; }
+    .bl li {
+      font-size: .88rem; line-height: 1.6; color: var(--txt2);
+      padding: 6px 0 6px 20px; position: relative;
+    }
+    .bl li::before {
+      content: ''; position: absolute; left: 0; top: 13px;
+      width: 6px; height: 6px; border-radius: 50%; background: var(--blue);
+    }
+
+    .impact {
+      padding: 14px 18px; border-radius: 10px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .impact-g { background: var(--grn-bg); color: var(--grn); }
+    .impact-o { background: var(--org-bg); color: var(--org); }
+    .impact .t {
+      font-size: .56rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .07em; white-space: nowrap;
+    }
+    .impact .m { font-size: .84rem; font-weight: 600; line-height: 1.45; }
+
+    .demo {
+      margin-top: 14px; background: var(--paper);
+      border: 2px dashed var(--bdr); border-radius: 10px;
+      padding: 28px 16px; text-align: center;
+      color: var(--txt2); font-size: .82rem;
+    }
+
+    /* ── Summary banner ── */
+    .summary {
+      background: var(--grad); color: #fff; border-radius: 20px;
+      padding: 28px 28px 24px; margin-top: 36px;
+    }
+    .summary-label {
+      font-size: .56rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .14em; opacity: .5; margin-bottom: 14px; text-align: center;
+    }
+    .summary-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px;
+    }
+    .summary-item {
+      font-size: .82rem; line-height: 1.5; font-weight: 500;
+      padding: 4px 0 4px 22px; position: relative;
+    }
+    .summary-item::before {
+      content: attr(data-icon); position: absolute; left: 0; top: 3px; font-size: .82rem;
+    }
+    .summary-next {
+      grid-column: 1 / -1; margin-top: 6px; padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,.15);
+      font-size: .8rem; font-weight: 500; opacity: .8; text-align: center;
+    }
+
+    /* ── Metrics ── */
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .metric {
+      background: var(--paper); border-radius: 12px; padding: 18px 16px;
+      border: 1px solid var(--bdr); text-align: center;
+    }
+    .metric-value {
+      font-size: 1.6rem; font-weight: 800; color: var(--blue); line-height: 1;
+    }
+    .metric-value.green { color: var(--grn); }
+    .metric-label {
+      font-size: .68rem; font-weight: 600; color: var(--txt2);
+      margin-top: 4px; line-height: 1.3;
+    }
+
+    /* ── Charts ── */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .chart-card {
+      background: var(--paper); border-radius: 12px; padding: 20px;
+      border: 1px solid var(--bdr);
+    }
+    .chart-title {
+      font-size: .75rem; font-weight: 700; color: var(--txt); margin-bottom: 14px;
+    }
+    .chart-title span { font-weight: 500; color: var(--txt2); font-size: .68rem; }
+
+    /* Burndown */
+    .burndown-area {
+      position: relative; height: 120px; border-left: 1px solid #E0E0E0;
+      border-bottom: 1px solid #E0E0E0;
+    }
+    .burndown-svg { width: 100%; height: 100%; }
+
+    /* Velocity */
+    .vel-chart { display: flex; align-items: flex-end; justify-content: space-around; height: 120px; padding-bottom: 22px; position: relative; border-left: 1px solid #E0E0E0; border-bottom: 1px solid #E0E0E0; }
+    .vel-sprint { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .vel-bars { display: flex; gap: 4px; align-items: flex-end; }
+    .vel-bar {
+      width: 22px; border-radius: 3px 3px 0 0; min-height: 2px; position: relative;
+    }
+    .vel-bar .vel-val {
+      position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+      font-size: .58rem; font-weight: 700; color: var(--txt2);
+    }
+    .vel-bar.planned { background: #90CAF9; }
+    .vel-bar.completed { background: #4CAF50; }
+    .vel-bar.incomplete { background: #42A5F5; }
+    .vel-label { font-size: .65rem; font-weight: 600; color: var(--txt2); margin-top: 4px; position: absolute; bottom: 2px; }
+    .vel-legend { display: flex; gap: 14px; margin-top: 10px; justify-content: center; }
+    .vel-legend-item { display: flex; align-items: center; gap: 4px; font-size: .6rem; color: var(--txt2); font-weight: 600; }
+    .vel-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+    /* ── Cards ── */
+    .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .card {
+      background: var(--paper); border-radius: 12px; padding: 20px;
+      border: 1px solid var(--bdr);
+      transition: box-shadow .2s;
+    }
+    .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+    .card h4 { font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
+    .card p { font-size: .78rem; color: var(--txt2); line-height: 1.55; }
+
+    /* ── Progress bar ── */
+    .progress-wrap { margin-bottom: 18px; }
+    .progress-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 6px;
+    }
+    .progress-header span { font-size: .75rem; font-weight: 600; color: var(--txt2); }
+    .progress-header strong { font-size: .85rem; font-weight: 800; color: var(--blue); }
+    .progress-bar {
+      height: 8px; background: #E8ECF0; border-radius: 4px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 4px;
+      background: linear-gradient(90deg, var(--blue), #0EBFCA);
+      transition: width .6s ease;
+    }
+
+    /* ── Next sprint ── */
+    .next { display: flex; flex-direction: column; gap: 8px; }
+    .next-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; background: var(--paper);
+      border-radius: 10px; border: 1px solid var(--bdr);
+      border-left: 3px solid var(--blue);
+    }
+    .next-badge {
+      font-size: .54rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .05em; padding: 3px 8px; border-radius: 4px;
+      white-space: nowrap; min-width: 52px; text-align: center;
+    }
+    .badge-qa { background: #e8f5e9; color: #2e7d32; }
+    .badge-active { background: #e3f2fd; color: #1565c0; }
+    .badge-planned { background: var(--tint); color: var(--txt2); }
+    .next-text { font-size: .84rem; line-height: 1.4; color: var(--txt2); }
+    .next-text strong { color: var(--txt); }
+
+    /* ── Footer ── */
+    .footer {
+      background: #F1F4F6; padding: 28px 32px;
+      font-size: .7rem; color: var(--txt2); text-align: center;
+    }
+    .footer-copy { font-size: .6rem; color: var(--txt2); margin-top: 6px; }
+
+    @media (max-width: 640px) {
+      .hero { border-radius: 0; padding: 32px 20px; }
+      .hero-wrap { padding: 0; }
+      .hero h1 { font-size: 1.5rem; }
+      .cards { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+    @media print {
+      body { background: #fff; }
+      .hero { padding: 28px; }
+      .sec { padding-top: 20px; }
+      .summary { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header bar ── -->
+<div class="header-bar">
+  <svg width="107" height="40" viewBox="0 0 107 40" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0_5382_106)"><path d="M7.216 38.213l-.1-.064.677-1.42.06-.126.124.064c.475.257 1.196.464 1.98.464.708 0 1.256-.282 1.256-.741.01-.318-.294-.578-1.103-.934-.937-.438-1.888-1.036-1.895-2.112.007-1.623 1.648-2.566 3.589-2.569 1.082 0 1.729.203 2.121.39l.117.058-.693 1.58-.124-.056c-.261-.121-.849-.324-1.531-.321h-.05c-.839 0-1.189.36-1.189.655-.025.3.445.584 1.196.933 1.078.48 1.817 1.132 1.82 2.104-.003 1.777-1.718 2.666-3.694 2.67-1.238-.025-2.125-.278-2.578-.567z" fill="#005288"/><path d="M14.249 38.658l1.721-7.761h5.459l-.375 1.637h-3.299l-.3 1.332h3.114l-.336 1.509-.021.107h-3.119l-.343 1.541h3.494l-.357 1.638h-5.64z" fill="#005288"/><path d="M25.813 38.658l-.031-.086c-.092-.242-.173-.873-.27-1.805-.098-.879-.342-1.04-1.046-1.064h-.463l-.647 2.955H21.224l1.687-7.512.018-.085.085-.018c.597-.125 1.485-.203 2.365-.203.841 0 1.715.11 2.358.449.601.299 1.05.829 1.05 1.588 0 1.1-.799 1.808-1.817 2.157.406.27.587.765.66 1.345.104.83.192 1.83.326 2.079l.1.196h-2.232zm-.866-4.425c.976-.004 1.619-.495 1.619-1.122 0-.48-.48-.726-1.202-.733-.283 0-.477.014-.615.04l-.41 1.815h.612z" fill="#005288"/><path d="M31.007 38.658h-.117l-1.128-7.761h2.21l.403 3.688c.07.63.127 1.22.173 1.83.29-.617.63-1.261.976-1.892l2.001-3.627h2.408l-4.681 7.761z" fill="#005288"/><path d="M37.113 38.658l1.722-7.761h1.977l.166-.001-1.722 7.762h-2.146z" fill="#005288"/><path d="M41.39 35.457c0-1.727.917-3.09 2.275-3.863.933-.559 2.04-.819 3.291-.819.969 0 1.687.185 1.973.338l.103.057-.601 1.541-.128-.053c-.233-.1-.795-.236-1.531-.236-.732 0-1.418.196-1.923.556-.704.487-1.149 1.296-1.149 2.3.014 1.121.689 1.84 2.188 1.855.598 0 1.199-.086 1.62-.239l.159-.057.177 1.456.014.103-.1.04c-.49.184-1.294.341-2.358.341-2.355 0-4.002-1.26-4.006-3.325z" fill="#005288"/><path d="M48.798 38.658l1.721-7.761h5.459l-.375 1.637h-3.298l-.301 1.332h3.115l-.336 1.509-.021.107H51.644l-.343 1.541h3.493l-.357 1.638h-5.64z" fill="#005288"/><path d="M55.618 38.216l-.099-.064.675-1.42.06-.125.124.064c.499.257 1.22.463 2.005.463.707 0 1.255-.281 1.255-.74.007-.317-.3-.577-1.11-.933-.937-.438-1.888-1.036-1.895-2.112.007-1.623 1.648-2.566 3.589-2.57 1.081 0 1.729.203 2.121.392l.117.057-.693 1.58-.124-.057c-.261-.12-.848-.324-1.527-.32h-.05c-.841 0-1.191.36-1.191.655-.025.299.442.584 1.195.933 1.078.481 1.817 1.132 1.82 2.104-.003 1.777-1.717 2.667-3.694 2.67-1.237-.025-2.125-.278-2.577-.566z" fill="#005288"/><path d="M61.702 39.779c.566-.982 1.135-2.132 1.471-3.13l.028-.088 2.355-.132-.113.213c-.601 1.143-1.397 2.318-2.174 3.194l-.036.039-1.403.103-.255.018.128-.221z" fill="#005288"/><path d="M68.894 38.658l1.721-7.761h1.977l.166-.001-1.722 7.762h-2.146z" fill="#005288"/><path d="M77.828 38.658l-1.255-3.076c-.311-.815-.527-1.413-.722-2.1-.116.68-.286 1.527-.488 2.449l-.594 2.727h-1.845l-.17-.001 1.722-7.76h2.39l1.191 2.944c.258.708.456 1.321.626 1.922.064-.591.173-1.246.354-2.04l.618-2.83h2.016l-1.709 7.761h-2.131z" fill="#005288"/><path d="M82.082 35.457c0-1.727.916-3.09 2.273-3.863.934-.559 2.04-.819 3.292-.819.968 0 1.686.185 1.973.338l.102.057-.6 1.541-.128-.053c-.233-.1-.796-.236-1.531-.236-.732 0-1.418.196-1.923.556-.704.487-1.15 1.296-1.15 2.3.011 1.121.69 1.84 2.192 1.855.598 0 1.199-.086 1.62-.239l.155-.057.177 1.456.014.103-.099.04c-.488.184-1.295.341-2.358.341-2.355 0-4.003-1.26-4.006-3.325z" fill="#005288"/><path d="M90.68 38.772c-.68 0-1.174-.446-1.174-1.058 0-.69.576-1.267 1.393-1.27.69 0 1.213.444 1.213 1.078 0 .74-.63 1.246-1.421 1.246h-.014z" fill="#005288"/><path d="M11.925 25.65h.032l-.103-.046c.156-.339.322-.684.496-1.033H.537a.538.538 0 000 1.082h11.3s.007-.025.014-.036l.078.036z" fill="#005288"/><path d="M100.742 24.567H20.764c-.24.36-.477.723-.71 1.083h80.685a.538.538 0 000-1.083z" fill="#005288"/><path d="M11.848 25.614s-.007.021-.014.036h.088l-.078-.036z" fill="#005288"/><path d="M25.756 20.741c-1.771-2.784-4.041-7.113-4.275-7.611h6.262c1.559 2.691 2.178 3.136 3.78 6.105.632 1.008-.008 1.926-1.115 1.944-1.856-.025-2.005 0-3.861-.004-.251-.018-.64-.231-.788-.438z" fill="#0077C0"/><path d="M13.368 26.052c1.895-4.144 5.307-9.345 8.114-12.923h6.262c-3.762 4.13-7.609 9.327-10.497 14.119-.106.153-.378.356-.573.367-1-.043-1.98.036-2.97-.01-.732-.079-.53-1.108-.34-1.553z" fill="#0096D6"/><path d="M21.482 12.314c3.928-4.45 8.39-8.483 13.527-11.48.216-.114.506-.182.753-.203 1.478-.125 2.846-.22 4.275-.203.516.007 1.393.349.65.812-4.642 2.706-9.164 7.262-12.944 11.076h-6.262z" fill="#0096D6"/><path d="M18.268 6.486c-.248-.651.48-1.225.99-1.744.378-.388.66-.659 1.799-1.752.428-.41.827-.153.972.04 1.34 1.858 5.162 8.573 5.162 8.573h-6.262s-1.445-3.05-2.145-5.125c-.117-.364-.033-.795.26-1.748z" fill="#0077C0"/><path d="M23.596 2.684c0-1.524 1.223-2.723 2.733-2.684 1.51.039 2.737 1.307 2.737 2.827 0 1.52-1.224 2.723-2.737 2.684-1.51-.04-2.737-1.307-2.737-2.827z" fill="#0077C0"/><path fill-rule="evenodd" clip-rule="evenodd" d="M39.552 7.437c.782-.491 1.503-.875 2.171-1.15.665-.274 1.404-.41 2.22-.41 1.319 0 2.337.363 3.059 1.09.721.726 1.092 1.733 1.12 3.022.022 1.09-.152 2.147-.52 3.168-.372 1.022-.888 1.905-1.546 2.641-.69.78-1.474 1.389-2.355 1.823-.876.438-1.87.651-2.97.651-.696 0-1.4-.021-1.93-.092-.569-.075-1.188-.196-1.665-.452l-.693 2.827c-.071.295-.488.63-.789.63h-2.549c-.573 0-.919-.442-.789-1.004l3.161-13.35c.07-.296.488-.63.788-.63h2.55c.572 0 .922.445.788 1.004l-.053.231zm4.123 3.286c-.021-.609-.195-1.075-.517-1.4-.321-.32-.877-.483-1.676-.483-.41 0-.81.06-1.199.185-.389.124-.799.285-1.234.484l-1.304 5.668c.251.092.54.164.873.217.329.05.672.075 1.018.075.704 0 1.323-.132 1.857-.392.533-.263.958-.605 1.272-1.032.319-.42.555-.912.711-1.478.156-.566.223-1.178.198-1.84z" fill="#005288"/><path d="M59.73 9.975c-.092.395-.541.69-.937.616a6.4 6.4 0 00-.517-.072c-.378-.035-.753-.053-1.124-.053-.612 0-1.202.046-1.768.139-.569.089-1.152.235-1.757.434l-2.224 9.509c-.067.299-.484.634-.788.634h-3.02c-.568 0-.918-.442-.787-1.004l3.104-13.35c.068-.299.485-.63.789-.63h3.019c.57 0 .92.442.787 1.001l-.265 1.147c.88-.652 1.754-1.182 2.63-1.588.874-.39 1.758-.603 2.645-.603.545.014.87.338.877.765.014.897-.665 3.058-.665 3.058z" fill="#005288"/><path d="M86.112 9.705c-.87-.303-1.76-.452-2.676-.452-1.007 0-1.754.12-2.288.359-.534.239-.795.609-.795 1.1 0 .374.222.673.689.88.456.203 1.181.413 2.164.63 1.831.399 3.154.901 3.963 1.51.806.605 1.213 1.456 1.213 2.549 0 1.63-.743 2.916-2.224 3.859-1.482.94-3.486 1.41-6.011 1.41-1.24 0-2.443-.118-3.606-.349-.823-.167-1.488-.349-2.004-.534-.343-.125-.597-.598-.516-.954l.516-2.229c.152-.648.704-.865 1.252-.484l.117.082c.29.2.707.41 1.244.623.453.196.987.367 1.584.509.605.143 1.255.214 1.955.214 1.043 0 1.828-.121 2.351-.363.527-.245.782-.594.782-1.043 0-.342-.18-.609-.559-.794-.371-.181-1.142-.41-2.309-.68-1.98-.459-3.334-1.015-4.066-1.663-.731-.651-1.099-1.463-1.099-2.431 0-1.645.732-2.944 2.199-3.895 1.464-.95 3.447-1.424 5.95-1.424 1.086 0 2.171.11 3.26.335.707.142 1.27.292 1.697.434.361.118.622.588.534.961l-.485 2.094c-.141.616-.675.84-1.213.513a6.834 6.834 0 00-1.626-.759z" fill="#005288"/><path d="M100.473 9.705c-.87-.303-1.76-.452-2.676-.452-.994 0-1.757.12-2.288.359-.537.239-.795.609-.795 1.1 0 .374.22.673.686.88.456.203 1.181.413 2.164.63 1.831.399 3.154.901 3.96 1.51.809.605 1.212 1.456 1.212 2.549 0 1.63-.739 2.916-2.224 3.859-1.481.94-3.483 1.41-6.01 1.41-1.241 0-2.443-.118-3.607-.349-.823-.167-1.484-.349-2-.534-.343-.125-.601-.598-.52-.954l.517-2.229c.152-.648.7-.865 1.248-.484l.117.082c.29.2.707.41 1.244.623.453.196.987.367 1.584.509.605.143 1.259.214 1.956.214 1.046 0 1.828-.121 2.351-.363.527-.245.785-.594.785-1.043 0-.342-.184-.609-.559-.794-.374-.181-1.145-.41-2.312-.68-1.98-.459-3.334-1.015-4.066-1.663-.728-.651-1.096-1.463-1.096-2.431 0-1.645.732-2.944 2.2-3.895 1.463-.95 3.446-1.424 5.95-1.424 1.085 0 2.174.11 3.26.335.71.142 1.27.292 1.697.434.361.118.625.588.537.961l-.485 2.094c-.142.616-.676.84-1.213.513a6.834 6.834 0 00-1.626-.759z" fill="#005288"/><path d="M9.408 5.176l-.944 4.254h7.506c.573 0 .919.442.789 1.004l-.492 2.122c-.07.299-.488.63-.788.63H7.601l-1.008 4.258h8.135c.566 0 .916.438.792.997l-.477 2.122c-.067.302-.484.637-.788.637H1.69c-.57 0-.919-.441-.789-1.004L5.06 2.054c.067-.299.484-.634.788-.634h12.177c.573 0 .919.442.789 1.001l-.484 2.122c-.068.299-.485.634-.789.634H9.408z" fill="#005288"/><path fill-rule="evenodd" clip-rule="evenodd" d="M70.446 11.135c0-.687-.216-1.214-.637-1.577-.427-.363-1.04-.548-1.838-.548-1.015 0-1.82.26-2.433.783-.657.52-1.152 1.246-1.492 2.18h6.326c.024-.157.046-.299.06-.431a4.7 4.7 0 00.018-.406zM73.055 19.719c-.032.131-.361.623-.488.676-.788.32-1.711.566-2.57.741-1.004.206-2.069.41-3.203.41-2.479 0-4.395-.552-5.742-1.652-1.347-1.1-2.022-2.627-2.022-4.571 0-1.328.219-2.545.661-3.66.442-1.11 1.075-2.086 1.906-2.93.792-.815 1.785-1.463 2.977-1.939 1.191-.477 2.5-.716 3.924-.716 2.168 0 3.398.441 4.498 1.324 1.1.883 1.651 2.182 1.651 3.905 0 .591-.056 1.168-.177 1.734a8.59 8.59 0 01-.276 1.1c-.078.263-.502.584-.774.584H63.583v.3c0 1.01.353 1.8 1.064 2.367.711.57 1.8.855 3.267.855 1.022 0 1.99-.278 2.906-.623.506-.192 1.082-.498 1.52-.719.764-.381 1.344.082 1.15.915l-.439 1.911z" fill="#005288"/><path d="M105.731 6.194c.71 0 1.269.555 1.269 1.264 0 .708-.559 1.278-1.277 1.278-.717 0-1.286-.555-1.286-1.278 0-.723.569-1.264 1.286-1.264h.008zm-.015.224c-.569 0-1 .47-1 1.04s.431 1.046 1.015 1.046c.569.008.986-.459.986-1.039 0-.58-.417-1.047-.994-1.047h-.01zm-.222 1.737h-.244v-1.324c.134-.025.272-.039.456-.039.219 0 .329.039.417.1.081.057.134.16.134.278 0 .167-.116.27-.261.316v.014c.12.047.184.15.222.318.039.206.064.285.096.331h-.255c-.039-.046-.07-.167-.102-.289-.032-.142-.117-.206-.308-.206h-.159v.495zm0-.676h.166c.184 0 .339-.054.339-.214 0-.128-.078-.195-.314-.195a.935.935 0 00-.195.007v.395z" fill="#005288"/></g><defs><clipPath id="clip0_5382_106"><rect width="107" height="40" fill="#fff"/></clipPath></defs></svg>
+</div>
+
+
+<!-- ── Hero gradient banner ── -->
+<div class="hero-wrap">
+  <div class="hero">
+    <div class="hero-label">Vital Signs Modernization</div>
+    <h1>Sprint 36 — Progress Update</h1>
+    <div class="sub">May 21 – June 3, 2026</div>
+    <div class="rollout">🎯 Target Rollout — September 2026</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══ Summary ═══ -->
+  <div class="summary">
+    <div class="summary-label">Sprint 36 at a Glance</div>
+    <div class="summary-grid">
+      <div class="summary-item" data-icon="✅">12 of 15 tracking reports wired end-to-end with seed data</div>
+      <div class="summary-item" data-icon="✅">3 planning report screens completed</div>
+
+      <div class="summary-next">⏭️ Next: connect planning reports to data · office-level access control · remaining tracking coverage</div>
+    </div>
+  </div>
+
+  <!-- ═══ Platform ═══ -->
+  <div class="sec">
+    <div class="sec-label">Infrastructure &amp; Readiness</div>
+    <div class="sec-title">Platform Improvements</div>
+    <div class="cards">
+      <div class="card">
+        <h4>🔐 Security</h4>
+        <p>Developer tools hidden from end users in production — only visible in internal environments</p>
+      </div>
+      <div class="card">
+        <h4>⬆️ Framework</h4>
+        <p>Upgraded to the latest Microsoft-supported framework — security patches and support through 2028</p>
+      </div>
+      <div class="card">
+        <h4>🎓 Training Env</h4>
+        <p>Vital Signs deployed to the Training environment</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Sprint Metrics ═══ -->
+  <div class="sec">
+    <div class="sec-label">Sprint Health</div>
+    <div class="sec-title">Sprint 36 Metrics</div>
+
+    <!-- Stat cards -->
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-value green">100%</div>
+        <div class="metric-label">Completion Rate</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value">14</div>
+        <div class="metric-label">Avg Velocity<br>(3 sprints)</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value">3</div>
+        <div class="metric-label">Avg Daily Burndown</div>
+      </div>
+      <div class="metric">
+        <div class="metric-value">0</div>
+        <div class="metric-label">Unestimated Items</div>
+      </div>
+    </div>
+
+    <!-- Burndown + Velocity charts -->
+    <div class="charts-row">
+
+      <!-- Burndown Chart -->
+      <div class="chart-card">
+        <div class="chart-title">Sprint Burndown <span>· May 21 – Jun 3</span></div>
+        <div class="burndown-area">
+          <svg class="burndown-svg" viewBox="0 0 400 120" preserveAspectRatio="none">
+            <!-- Grid lines -->
+            <line x1="0" y1="30" x2="400" y2="30" stroke="#F0F0F0" stroke-width="1"/>
+            <line x1="0" y1="60" x2="400" y2="60" stroke="#F0F0F0" stroke-width="1"/>
+            <line x1="0" y1="90" x2="400" y2="90" stroke="#F0F0F0" stroke-width="1"/>
+
+            <!-- Ideal trend line -->
+            <line x1="0" y1="10" x2="400" y2="115" stroke="#E57373" stroke-width="1.5" stroke-dasharray="6,4" opacity=".5"/>
+
+            <!-- Scope line (orange) -->
+            <polyline fill="none" stroke="#FF9800" stroke-width="2"
+              points="0,12 40,10 80,8 133,6 180,5 220,4 267,3 310,2 355,1 400,0"/>
+
+            <!-- Burndown area (blue fill) -->
+            <polygon fill="rgba(18,138,223,.15)"
+              points="0,12 40,20 80,30 133,35 180,45 220,55 267,70 310,85 355,100 400,118 400,120 0,120"/>
+            <!-- Burndown line -->
+            <polyline fill="none" stroke="#128ADF" stroke-width="2.5"
+              points="0,12 40,20 80,30 133,35 180,45 220,55 267,70 310,85 355,100 400,118"/>
+          </svg>
+        </div>
+        <div class="vel-legend" style="margin-top: 8px;">
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#128ADF;"></div>Remaining Work</div>
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#FF9800;"></div>Total Scope</div>
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#E57373; opacity:.5;"></div>Ideal Trend</div>
+        </div>
+      </div>
+
+      <!-- Velocity Chart -->
+      <div class="chart-card">
+        <div class="chart-title">Team Velocity <span>· Last 3 Sprints · Avg: 14</span></div>
+        <div class="vel-chart">
+          <!-- Sprint 35 -->
+          <div class="vel-sprint">
+            <div class="vel-bars">
+              <div class="vel-bar planned" style="height:38px;"><span class="vel-val">8</span></div>
+              <div class="vel-bar completed" style="height:24px;"><span class="vel-val">5</span></div>
+            </div>
+            <span class="vel-label">Sprint 35</span>
+          </div>
+          <!-- Sprint 36 -->
+          <div class="vel-sprint">
+            <div class="vel-bars">
+              <div class="vel-bar planned" style="height:52px;"><span class="vel-val">11</span></div>
+              <div class="vel-bar completed" style="height:95px;"><span class="vel-val">21</span></div>
+            </div>
+            <span class="vel-label">Sprint 36</span>
+          </div>
+          <!-- Sprint 37 (in progress) -->
+          <div class="vel-sprint">
+            <div class="vel-bars">
+              <div class="vel-bar planned" style="height:52px;"><span class="vel-val">11</span></div>
+              <div class="vel-bar incomplete" style="height:19px;"><span class="vel-val">4</span></div>
+            </div>
+            <span class="vel-label">Sprint 37</span>
+          </div>
+        </div>
+        <div class="vel-legend">
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#90CAF9;"></div>Planned</div>
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#4CAF50;"></div>Completed</div>
+          <div class="vel-legend-item"><div class="vel-legend-dot" style="background:#42A5F5;"></div>In Progress</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ 1. Tracking Reports ═══ -->
+  <div class="sec">
+    <div class="sec-label">What We Delivered</div>
+    <div class="sec-title">Tracking Reports — Data Pipeline in Place</div>
+
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span>Tracking report coverage</span>
+        <strong>12 of 15 reports</strong>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 80%;"></div>
+      </div>
+    </div>
+
+    <ul class="bl">
+      <li>Revenue, staffing hours, business mix, weekly performance, and growth targets now flow through the full pipeline — across both Temp/Contract and Direct Hire</li>
+      <li>Currently running on representative seed data — production data integration is a separate milestone</li>
+      <li>Remaining 3 reports (Top Ten Clients, DH/PS Fees Collected Graph, Prospect Calls) planned for next sprint</li>
+    </ul>
+    <div class="impact impact-g">
+      <span class="t">Business Value</span>
+      <span class="m">80% of tracking reports have the full pipeline in place — on track for September rollout</span>
+    </div>
+  </div>
+
+  <!-- ═══ 2. Planning UI ═══ -->
+  <div class="sec">
+    <div class="sec-label">What We Delivered</div>
+    <div class="sec-title">Planning Reports — Screens &amp; Goal Entry</div>
+    <ul class="bl">
+      <li>Quarterly Business Goals, Future Expectations, and Year-End Gross Margin — screens completed and closed this sprint</li>
+      <li>Office managers can enter and save planning goals directly in the app — data persists to Cosmos DB</li>
+      <li>Goal entry supports minimum, expected, and desired targets across all planning categories</li>
+    </ul>
+    <div class="impact impact-g">
+      <span class="t">Business Value</span>
+      <span class="m">3 more planning screens completed with goal entry — ready for data connection in upcoming sprints</span>
+    </div>
+  </div>
+
+  <!-- ═══ Live Demo ═══ -->
+  <div class="sec">
+    <div class="demo">📊 Live Demo — Walk through tracking reports with data from Cosmos DB, then show planning goal entry in action</div>
+  </div>
+
+  <!-- ═══ 4. Up Next ═══ -->
+  <div class="sec">
+    <div class="sec-label">Looking Ahead</div>
+    <div class="sec-title">Sprint 37 — Planned Work</div>
+    <div class="next">
+      <div class="next-row">
+        <span class="next-badge badge-qa">In QA</span>
+        <span class="next-text"><strong>Tab-Specific URLs</strong> — Each report tab gets its own shareable link</span>
+      </div>
+      <div class="next-row">
+        <span class="next-badge badge-active">Active</span>
+        <span class="next-text"><strong>Office-Level Access</strong> — Users see only the offices they are authorized to access</span>
+      </div>
+      <div class="next-row">
+        <span class="next-badge badge-planned">Planned</span>
+        <span class="next-text"><strong>Planning Data Connection</strong> — Wire 5 planning reports to Cosmos DB (Business Goals, Target Growth, Gross Margin, Hours Billed, Year-End GM)</span>
+      </div>
+      <div class="next-row">
+        <span class="next-badge badge-planned">Planned</span>
+        <span class="next-text"><strong>Remaining Tracking</strong> — Connect Top Ten Clients and DH/PS Fees Collected Graph</span>
+      </div>
+      <div class="next-row">
+        <span class="next-badge badge-planned">Planned</span>
+        <span class="next-text"><strong>Data Entry Polish</strong> — Rounding, validation, and input consistency for Business Goals and Future Expectations</span>
+      </div>
+      <div class="next-row">
+        <span class="next-badge badge-planned">Planned</span>
+        <span class="next-text"><strong>Navigation Cleanup</strong> — Simplify planning report menu labels</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="footer">
+  Express Employment Professionals · Vital Signs Modernization · Sprint 36 · June 2026
+  <div class="footer-copy">©2024–2026 Alamo Franchise Services, LLC, a subsidiary of Express Services, Inc. All rights reserved.</div>
+</footer>
+
+</body>
+</html>
