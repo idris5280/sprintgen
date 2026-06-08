@@ -41,6 +41,25 @@ From the browser, scrum masters can:
 
 Uploaded workbooks and generated web outputs are stored under `runtime/jobs/<job-id>/` and cleaned up automatically after several hours. They are not written permanently to `output/`.
 
+## Live Azure App
+
+The current hosted MVP is available at:
+
+```text
+https://sprintgen.orangeriver-b6b98f37.eastus.azurecontainerapps.io/
+```
+
+Azure resources:
+
+- Resource group: `sprintgen-rg`
+- Container Apps environment: `sprintgen-env`
+- Container App: `sprintgen`
+- Region: `eastus`
+
+The live app is currently deployed from `.azure/containerapp-runtime.yml`. It runs the official Playwright container image and pulls the public GitHub `main` branch at startup. This keeps the app online even though ACR cloud builds are blocked on the current subscription.
+
+For a fuller production setup, use the included `Dockerfile` to build a custom image in CI, push it to Azure Container Registry, and point the Container App at that image.
+
 ## Presentation Mode
 
 After a successful upload, the result page includes a `Select a mode:` area with three Presentation Mode links:
@@ -219,3 +238,5 @@ Conceptual deployment path:
 6. Let Azure provide the default app URL.
 
 The app listens on `process.env.PORT || 3000`, so Azure can set the port through environment configuration.
+
+This repo also includes `.azure/containerapp-runtime.yml`, which documents the current live MVP deployment configuration.
