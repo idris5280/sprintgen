@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{basics.TeamName}} - {{basics.SprintName}} Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/present.css?v=1">
+</head>
+<body class="present vibe-{{vibe}}">
+  <div class="ambient-field" aria-hidden="true"></div>
+
+  <header class="present-topbar" aria-label="Presentation controls">
+    <div>
+      <span class="topbar-kicker">{{basics.TeamName}}</span>
+      <strong>{{basics.SprintName}}</strong>
+    </div>
+    <div class="topbar-progress" aria-label="Slide progress">
+      <span class="progress-text">1 / 1</span>
+      <span class="progress-track"><span class="progress-fill"></span></span>
+    </div>
+  </header>
+
+  <main class="deck" tabindex="-1">
+    <section class="slide hero-slide is-active" id="slide-hero" data-slide-title="{{basics.SprintName}}">
+      <div class="slide-shell hero-shell">
+        <p class="slide-label">{{basics.TeamName}}</p>
+        <h1>{{basics.SprintName}}</h1>
+        <p class="hero-date">{{basics.DateRange}}</p>
+        <p class="hero-target">Target Rollout: {{basics.TargetRollout}}</p>
+      </div>
+    </section>
+
+    {{#if hasSummary}}
+      <section class="slide" id="slide-glance" data-slide-title="Sprint at a Glance">
+        <div class="slide-shell">
+          <p class="slide-label">Sprint at a Glance</p>
+          <h2>What changed this sprint</h2>
+          <div class="statement-grid">
+            {{#each summary}}
+              <article class="statement-card">{{text}}</article>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#if hasPlatform}}
+      <section class="slide" id="slide-platform" data-slide-title="Platform Improvements">
+        <div class="slide-shell">
+          <p class="slide-label">Infrastructure and Readiness</p>
+          <h2>Platform Improvements</h2>
+          <div class="card-grid">
+            {{#each platform}}
+              <article class="present-card">
+                <h3>{{title}}</h3>
+                <p>{{text}}</p>
+              </article>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#if hasMetrics}}
+      <section class="slide" id="slide-health" data-slide-title="Sprint Health">
+        <div class="slide-shell">
+          <p class="slide-label">Sprint Health</p>
+          <h2>{{basics.SprintName}} metrics</h2>
+          <div class="metric-grid">
+            {{#each metrics}}
+              <article class="present-metric tone-{{metricToneClass tone}}">
+                <strong>{{value}}</strong>
+                <span>{{label}}</span>
+              </article>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#if hasDelivered}}
+      {{#each delivered}}
+        <section class="slide delivered-slide" id="slide-delivered-{{@index}}" data-slide-title="{{sectionTitle}}">
+          <div class="slide-shell">
+            <p class="slide-label">{{sectionLabel}}</p>
+            <h2>{{sectionTitle}}</h2>
+            {{#if bullets}}
+              <ul class="deliver-list">
+                {{#each bullets}}
+                  <li>{{this}}</li>
+                {{/each}}
+              </ul>
+            {{/if}}
+            {{#if businessValue}}
+              <aside class="value-callout">
+                <span>Business Value</span>
+                <strong>{{businessValue}}</strong>
+              </aside>
+            {{/if}}
+          </div>
+        </section>
+      {{/each}}
+    {{/if}}
+
+    {{#if hasDemo}}
+      <section class="slide" id="slide-demo" data-slide-title="Live Demo">
+        <div class="slide-shell focus-shell">
+          <p class="slide-label">Live Demo</p>
+          <h2>Show the sprint in action</h2>
+          <div class="demo-lines">
+            {{#each demo}}
+              <p>{{this}}</p>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#if hasUpNext}}
+      <section class="slide" id="slide-up-next" data-slide-title="Looking Ahead">
+        <div class="slide-shell">
+          <p class="slide-label">Looking Ahead</p>
+          <h2>Up next</h2>
+          <div class="next-stack">
+            {{#each upNext}}
+              <article class="next-item">
+                <span>{{status}}</span>
+                <div>
+                  <h3>{{title}}</h3>
+                  {{#if description}}<p>{{description}}</p>{{/if}}
+                </div>
+              </article>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    <section class="slide closing-slide" id="slide-closing" data-slide-title="Closing">
+      <div class="slide-shell focus-shell">
+        <p class="slide-label">{{basics.TeamName}}</p>
+        <h2>Ready for the next sprint story.</h2>
+        <p class="closing-copy">{{basics.FooterText}}</p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="present-controls" aria-label="Slide navigation">
+    <button type="button" data-present-prev>Previous</button>
+    <button type="button" data-present-next>Next</button>
+  </nav>
+
+  <script src="/assets/present.js?v=1"></script>
+</body>
+</html>

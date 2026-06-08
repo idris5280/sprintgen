@@ -1,0 +1,28 @@
+{
+  "name": "sprintgen",
+  "version": "1.0.0",
+  "description": "Generate polished sprint demo HTML and PDF reports from an Excel workbook.",
+  "main": "src/server.js",
+  "scripts": {
+    "generate": "node src/generate.js",
+    "clean": "node -e \"const fs = require('fs'); fs.rmSync('output', { recursive: true, force: true }); fs.rmSync('runtime', { recursive: true, force: true }); fs.mkdirSync('output', { recursive: true });\"",
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "keywords": [
+    "sprint",
+    "demo",
+    "excel",
+    "pdf",
+    "handlebars"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "handlebars": "^4.7.8",
+    "multer": "^2.1.1",
+    "playwright": "^1.44.0",
+    "xlsx": "^0.18.5"
+  }
+}
