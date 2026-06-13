@@ -42,6 +42,15 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function safeJsonForScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function sanitizeDownloadName(value) {
   const clean = String(value || "sprint-demo")
     .trim()
@@ -216,55 +225,12 @@ function renderPage({ title, bodyClass = "", content }) {
 }
 
 function renderHomePage({ error = "" } = {}) {
-  const errorHtml = error
-    ? `<div class="alert alert-error"><strong>Workbook check:</strong> ${escapeHtml(error)}</div>`
-    : "";
-
-  return renderPage({
-    title: "SprintGen - Sprint Demo Builder",
-    bodyClass: "home-page",
-    content: `
-      <section class="hero-grid">
-        <div class="upload-panel">
-          <div class="eyebrow">SprintGen</div>
-          <h1>Build a sprint review from live ADO facts.</h1>
-          <p class="lede">Connect with a temporary PAT, choose the team and sprint, review the metrics, write the human context on screen, then generate the report, PDF, and Presentation Mode.</p>
-          ${errorHtml}
-          <div class="button-row hero-actions">
-            <a class="primary-button" href="/ado-admin">Start Sprint Review Builder</a>
-            <a class="secondary-button" href="/ado-test">Try ADO data test</a>
-          </div>
-          <div class="legacy-upload-callout">
-            <span>Workbook fallback</span>
-            <p>Excel generation still works for teams that want to fill out a spreadsheet manually.</p>
-          </div>
-          <form class="upload-form" action="/generate" method="post" enctype="multipart/form-data">
-            <label class="drop-zone" for="workbook">
-              <span class="drop-icon">xlsx</span>
-              <span class="drop-title">Drop in your sprint workbook</span>
-              <span class="drop-copy">Only .xlsx files, up to 8 MB. No HTML editing required.</span>
-              <input id="workbook" name="workbook" type="file" accept=".xlsx" required>
-            </label>
-            <button class="primary-button" type="submit">Generate report</button>
-          </form>
-          <div class="button-row">
-            <a class="secondary-button" href="/template">Download sample workbook</a>
-          </div>
-        </div>
-
-        <aside class="spark-card" aria-label="How it works">
-          <div class="spark-badge">ADO-powered</div>
-          <h2>Facts from ADO, review from the scrum master.</h2>
-          <p>SprintGen calculates the numbers and shows the real ADO stories. You choose what belongs in the review, write the delivery updates, and approve the final output.</p>
-          <ol class="steps">
-            <li><span>1</span><strong>Connect</strong><small>Use a temporary PAT while this is still a work-in-progress tool.</small></li>
-            <li><span>2</span><strong>Select</strong><small>Pick the team and sprint directly from Azure DevOps.</small></li>
-            <li><span>3</span><strong>Curate</strong><small>Write summary, delivery updates, business value, and next steps on screen.</small></li>
-            <li><span>4</span><strong>Generate</strong><small>Create the HTML report, PDF, and Presentation Mode.</small></li>
-          </ol>
-        </aside>
-      </section>
-    `
+  return renderAdoAdminConnectPage({
+    error: error
+      ? {
+          message: error
+        }
+      : null
   });
 }
 
@@ -944,9 +910,9 @@ function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
         <section class="result-card error-card">
           <div class="eyebrow">Sprint Review Builder</div>
           <h1>Load a team and sprint first.</h1>
-          <p class="lede">${escapeHtml(error && error.message ? error.message : "Choose a sprint from ADO Admin Mode to start the review builder.")}</p>
+          <p class="lede">${escapeHtml(error && error.message ? error.message : "Choose a sprint to start the review builder.")}</p>
           <div class="result-actions">
-            <a class="primary-button" href="/ado-admin">Back to ADO Admin Mode</a>
+            <a class="primary-button" href="/ado-admin">Back to SprintGen</a>
           </div>
         </section>
       `
@@ -1963,7 +1929,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
             <small>${escapeHtml(result.workItems.source)}</small>
           </div>
           <div>
-            <span>Configured source</span>
+            <span>ADO source</span>
             <strong>${escapeHtml(result.config.org)} / ${escapeHtml(result.config.project)}</strong>
           </div>
         </div>
@@ -2008,7 +1974,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
 
         <form class="ado-form-card" action="/ado-test" method="post" autocomplete="off">
           <div class="form-heading">
-            <span>Configured project</span>
+            <span>Project</span>
             <strong>${escapeHtml(adoConfig.org)} / ${escapeHtml(adoConfig.project)}</strong>
           </div>
           ${errorHtml}
@@ -2027,7 +1993,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
             <small>Enter a sprint number like 37, or paste the full iteration path.</small>
           </label>
           <button class="primary-button" type="submit">Run feasibility test</button>
-          <a class="ghost-button full-width" href="/">Back to workbook generator</a>
+          <a class="ghost-button full-width" href="/">Back to SprintGen</a>
         </form>
       </section>
       ${resultHtml}
@@ -2226,6 +2192,16 @@ function resolveSelectedAreaPath(areaPaths, selectedAreaPath, defaultAreaPath = 
   return (areas[0] && areas[0].value) || selected || "";
 }
 
+function formatIterationForClient(iteration) {
+  return {
+    name: iteration.name || getSprintLabel(iteration.path),
+    path: iteration.path || "",
+    startDate: (iteration.attributes && iteration.attributes.startDate) || iteration.startDate || "",
+    finishDate: (iteration.attributes && iteration.attributes.finishDate) || iteration.finishDate || "",
+    timeFrame: (iteration.attributes && iteration.attributes.timeFrame) || iteration.timeFrame || ""
+  };
+}
+
 function getSprintLabel(iterationPath) {
   const parts = String(iterationPath || "").split("\\").filter(Boolean);
   return parts[parts.length - 1] || "Sprint";
@@ -2233,39 +2209,38 @@ function getSprintLabel(iterationPath) {
 
 function renderAdoAdminConnectPage({ error = null } = {}) {
   const errorHtml = error
-    ? `<div class="alert alert-error"><strong>Could not connect:</strong> ${escapeHtml(error.message)}${
+    ? `<div class="alert alert-error"><strong>Authorize:</strong> ${escapeHtml(error.message)}${
         error.detail ? `<small>${escapeHtml(error.detail)}</small>` : ""
       }</div>`
     : "";
 
   return renderPage({
-    title: "SprintGen - ADO Admin Mode",
-    bodyClass: "ado-page",
+    title: "SprintGen - Start Review",
+    bodyClass: "ado-page guided-page",
     content: `
-      <section class="ado-hero">
+      <section class="ado-hero guided-auth">
         <div class="ado-copy">
-          <div class="eyebrow">ADO Admin Mode</div>
-          <h1>Generate sprint intelligence for any readable team.</h1>
-          <p class="lede">Connect once with a read-capable Azure DevOps PAT, then choose a team and sprint from dropdowns. This keeps Phase 2 fast while we are still in work-in-progress mode.</p>
+          <div class="eyebrow">SprintGen</div>
+          <h1>Start your sprint review</h1>
+          <p class="lede">Authorize SprintGen to read Azure DevOps, then choose the sprint you want to turn into a polished review.</p>
           <div class="ado-northstar">
-            <strong>Temporary admin flow</strong>
-            <p>The PAT stays in server memory for this browser session only. It is not saved to disk, logged, or placed in URLs.</p>
+            <strong>Secure session</strong>
+            <p>Your PAT is kept in memory for this browser session only.</p>
           </div>
         </div>
 
         <form class="ado-form-card" action="/ado-admin/connect" method="post" autocomplete="off">
           <div class="form-heading">
-            <span>Configured project</span>
-            <strong>${escapeHtml(adoConfig.org)} / ${escapeHtml(adoConfig.project)}</strong>
+            <span>Authorize</span>
+            <strong>Unlock sprint data</strong>
           </div>
           ${errorHtml}
           <label class="field-group" for="pat">
             <span>Azure DevOps PAT</span>
-            <input class="text-input" id="pat" name="pat" type="password" required placeholder="Paste admin/read PAT" autocomplete="off">
-            <small>Use a short-lived PAT with read access to teams, iterations, work items, and Analytics.</small>
+            <input class="text-input" id="pat" name="pat" type="password" required placeholder="Paste PAT" autocomplete="off">
+            <small>Read access to teams, iterations, work items, and Analytics.</small>
           </label>
-          <button class="primary-button" type="submit">Connect to ADO</button>
-          <a class="ghost-button full-width" href="/">Back to workbook generator</a>
+          <button class="primary-button" type="submit">Continue</button>
         </form>
       </section>
     `
@@ -2282,87 +2257,220 @@ function renderAdoAdminPage({
   error = null
 } = {}) {
   const errorHtml = error
-    ? `<div class="alert alert-error"><strong>ADO admin note:</strong> ${escapeHtml(error.message)}${
+    ? `<div class="alert alert-error"><strong>SprintGen note:</strong> ${escapeHtml(error.message)}${
         error.detail ? `<small>${escapeHtml(error.detail)}</small>` : ""
       }</div>`
     : "";
 
-  const selectedTeamHtml = selectedTeam
-    ? `<div class="alert alert-good"><strong>${escapeHtml(selectedTeam)}</strong> is selected. ${escapeHtml(areaPaths.length)} area paths and ${escapeHtml(iterations.length)} team iterations are available.</div>`
-    : `<div class="alert alert-warn"><strong>Choose a team first.</strong> SprintGen will load that team's area paths and sprint list after you select one.</div>`;
-
-  const sprintFormHtml = selectedTeam
-    ? `
-      <form class="selector-form" action="/ado-admin/review" method="post">
-        <input type="hidden" name="team" value="${escapeHtml(selectedTeam)}">
-        <label class="field-group" for="areaPath">
-          <span>Area path</span>
-          ${
-            areaPaths.length > 0
-              ? `<select class="text-input" id="areaPath" name="areaPath" required>
-                  ${renderAreaOptions(areaPaths, selectedAreaPath)}
-                </select>`
-              : `<input class="text-input" id="areaPath" name="areaPath" type="text" value="${escapeHtml(selectedAreaPath)}" placeholder="Digital Transformation\\Sales Value Stream\\...">`
-          }
-          <small>This scopes the data so sibling teams or value streams do not leak into the review.</small>
-        </label>
-        <label class="field-group" for="sprint">
-          <span>Sprint</span>
-          <select class="text-input" id="sprint" name="sprint" required>
-            ${renderIterationOptions(iterations)}
-          </select>
-          <small>Select the sprint SprintGen should import next.</small>
-        </label>
-        <button class="primary-button" type="submit">Build Sprint Review</button>
-      </form>
-    `
-    : "";
+  const initialScope = selectedTeam
+    ? {
+        team: selectedTeam,
+        areaPaths,
+        defaultAreaPath: selectedAreaPath,
+        iterations: iterations.map(formatIterationForClient)
+      }
+    : null;
 
   return renderPage({
-    title: "SprintGen - ADO Admin Mode",
-    bodyClass: "ado-page",
+    title: "SprintGen - Choose Review",
+    bodyClass: "ado-page guided-page",
     content: `
-      <section class="ado-admin-header">
-        <div>
-          <div class="eyebrow">ADO Admin Mode</div>
-          <h1>Pick a team, pick a sprint, build the next report.</h1>
-          <p class="lede">You are connected to ${escapeHtml(adoConfig.org)} / ${escapeHtml(adoConfig.project)} with an in-memory PAT session.</p>
-        </div>
-        <form action="/ado-admin/disconnect" method="post">
-          <button class="secondary-button" type="submit">Disconnect PAT</button>
-        </form>
-      </section>
-
-      <section class="ado-selector-grid">
-        <div class="ado-form-card">
-          <div class="form-heading">
-            <span>Readable teams</span>
-            <strong>${escapeHtml(teams.length)} teams available</strong>
+      <section class="review-flow-shell">
+        <div class="review-flow-heading">
+          <div>
+            <div class="eyebrow">SprintGen</div>
+            <h1>Choose your review</h1>
+            <p class="lede">Pick the team and sprint. SprintGen will pull the facts and open the builder.</p>
           </div>
-          ${errorHtml}
-          <form class="selector-form" action="/ado-admin" method="get">
-            <label class="field-group" for="team">
-              <span>Team</span>
-              <select class="text-input" id="team" name="team" required>
-                ${renderTeamOptions(teams, selectedTeam)}
-              </select>
-              <small>Teams come directly from Azure DevOps project access.</small>
-            </label>
-            <button class="primary-button" type="submit">Load team scope</button>
+          <form action="/ado-admin/disconnect" method="post">
+            <button class="ghost-button" type="submit">Disconnect</button>
           </form>
         </div>
 
-        <div class="ado-form-card">
-          <div class="form-heading">
-            <span>Review scope</span>
-            <strong>${selectedTeam ? "Area + sprint" : "Waiting for team"}</strong>
+        <form class="review-flow-card" action="/ado-admin/review" method="post" data-review-flow>
+          ${errorHtml}
+          <div class="flow-step is-active">
+            <span class="flow-step-number">1</span>
+            <div>
+              <label class="field-group" for="team">
+                <span>Choose team</span>
+                <select class="text-input" id="team" name="team" required data-team-select>
+                  ${renderTeamOptions(teams, selectedTeam)}
+                </select>
+                <small>Choose the team you are reviewing.</small>
+              </label>
+            </div>
           </div>
-          ${selectedTeamHtml}
-          ${sprintFormHtml}
-        </div>
+
+          <div class="scope-status" data-scope-status>${selectedTeam ? "Team scope loaded." : "Team selection unlocks sprint details."}</div>
+
+          <div class="scope-panel${selectedTeam ? " is-open" : ""}" data-scope-details${selectedTeam ? "" : " aria-hidden=\"true\""}>
+            <div class="flow-step">
+              <span class="flow-step-number">2</span>
+              <div class="scope-grid">
+                <label class="field-group" for="sprint">
+                  <span>Choose sprint</span>
+                  <select class="text-input" id="sprint" name="sprint" required data-sprint-select${selectedTeam ? "" : " disabled"}>
+                    ${renderIterationOptions(iterations)}
+                  </select>
+                  <small>Choose the sprint to review.</small>
+                </label>
+                <label class="field-group" for="areaPath">
+                  <span>Work area</span>
+                  <select class="text-input" id="areaPath" name="areaPath" required data-area-select${selectedTeam ? "" : " disabled"}>
+                    ${renderAreaOptions(areaPaths, selectedAreaPath)}
+                  </select>
+                  <small>Choose the work area to include.</small>
+                </label>
+              </div>
+            </div>
+
+            <div class="flow-step build-step">
+              <span class="flow-step-number">3</span>
+              <div>
+                <strong>Build review</strong>
+                <p>SprintGen will pull metrics, stories, and next-sprint context from ADO.</p>
+                <button class="primary-button" type="submit" data-build-button${selectedTeam ? "" : " disabled"}>Build Review</button>
+              </div>
+            </div>
+          </div>
+
+          <noscript>
+            <div class="alert alert-warn"><strong>JavaScript required:</strong> Enable JavaScript to load area and sprint choices without leaving this page.</div>
+          </noscript>
+        </form>
       </section>
 
-      ${renderAdoStatusSummary(result)}
+      <script>
+        (function () {
+          var initialScope = ${safeJsonForScript(initialScope)};
+          var form = document.querySelector("[data-review-flow]");
+          if (!form) return;
+
+          var teamSelect = form.querySelector("[data-team-select]");
+          var areaSelect = form.querySelector("[data-area-select]");
+          var sprintSelect = form.querySelector("[data-sprint-select]");
+          var details = form.querySelector("[data-scope-details]");
+          var status = form.querySelector("[data-scope-status]");
+          var buildButton = form.querySelector("[data-build-button]");
+
+          function setStatus(message, tone) {
+            status.textContent = message;
+            status.className = "scope-status" + (tone ? " " + tone : "");
+          }
+
+          function formatDate(value) {
+            var raw = String(value || "");
+            var match = raw.match(/^(\\d{4})-(\\d{2})-(\\d{2})/);
+            return match ? Number(match[2]) + "/" + Number(match[3]) + "/" + match[1].slice(2) : raw;
+          }
+
+          function setOptions(select, items, placeholder, getValue, getLabel, selectedValue) {
+            select.innerHTML = "";
+            var placeholderOption = document.createElement("option");
+            placeholderOption.value = "";
+            placeholderOption.textContent = placeholder;
+            select.appendChild(placeholderOption);
+
+            items.forEach(function (item) {
+              var option = document.createElement("option");
+              option.value = getValue(item);
+              option.textContent = getLabel(item);
+              if (selectedValue && option.value === selectedValue) {
+                option.selected = true;
+              }
+              select.appendChild(option);
+            });
+          }
+
+          function updateBuildState() {
+            var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
+            buildButton.disabled = !ready;
+          }
+
+          function resetScope(message) {
+            setOptions(areaSelect, [], "Select an area path", function () { return ""; }, function () { return ""; });
+            setOptions(sprintSelect, [], "Select a sprint", function () { return ""; }, function () { return ""; });
+            areaSelect.disabled = true;
+            sprintSelect.disabled = true;
+            details.classList.remove("is-open");
+            details.setAttribute("aria-hidden", "true");
+            setStatus(message || "Team selection unlocks sprint details.");
+            updateBuildState();
+          }
+
+          function applyScope(data) {
+            var areas = Array.isArray(data.areaPaths) ? data.areaPaths : [];
+            var iterations = Array.isArray(data.iterations) ? data.iterations : [];
+
+            setOptions(
+              areaSelect,
+              areas,
+              "Select an area path",
+              function (area) { return area.value || ""; },
+              function (area) { return area.value || ""; },
+              data.defaultAreaPath || ""
+            );
+            setOptions(
+              sprintSelect,
+              iterations,
+              "Select a sprint",
+              function (iteration) { return iteration.path || iteration.name || ""; },
+              function (iteration) {
+                var dateRange = iteration.startDate && iteration.finishDate ? " (" + formatDate(iteration.startDate) + " to " + formatDate(iteration.finishDate) + ")" : "";
+                return (iteration.name || iteration.path || "Sprint") + dateRange;
+              },
+              ""
+            );
+
+            areaSelect.disabled = areas.length === 0;
+            sprintSelect.disabled = iterations.length === 0;
+            details.classList.add("is-open");
+            details.removeAttribute("aria-hidden");
+            setStatus("Sprint details ready.", "good");
+            updateBuildState();
+          }
+
+          async function loadScope(team) {
+            if (!team) {
+              resetScope();
+              return;
+            }
+
+            resetScope("Loading sprint details...");
+
+            try {
+              var response = await fetch("/ado-admin/scope?team=" + encodeURIComponent(team), {
+                headers: {
+                  Accept: "application/json"
+                }
+              });
+              var payload = await response.json();
+
+              if (!response.ok) {
+                throw new Error(payload.error || "Could not load sprint details.");
+              }
+
+              applyScope(payload);
+            } catch (error) {
+              resetScope(error.message);
+              setStatus(error.message, "error");
+            }
+          }
+
+          teamSelect.addEventListener("change", function () {
+            loadScope(teamSelect.value);
+          });
+          areaSelect.addEventListener("change", updateBuildState);
+          sprintSelect.addEventListener("change", updateBuildState);
+
+          if (initialScope && teamSelect.value === initialScope.team) {
+            applyScope(initialScope);
+          } else {
+            resetScope();
+          }
+        })();
+      </script>
     `
   });
 }
@@ -2607,8 +2715,8 @@ function renderErrorPage(error) {
         <h1>We could not generate that report yet.</h1>
         <p class="lede">${escapeHtml(error.message || error)}</p>
         <div class="result-actions">
-          <a class="primary-button" href="/">Try another workbook</a>
-          <a class="secondary-button" href="/template">Download sample workbook</a>
+          <a class="primary-button" href="/">Back to SprintGen</a>
+          <a class="ghost-button" href="/template">Sample workbook</a>
         </div>
       </section>
     `
@@ -2765,6 +2873,11 @@ app.use("/assets", express.static(path.join(projectRoot, "public"), { maxAge: 0 
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 app.get("/", (req, res) => {
+  if (getAdoSession(req)) {
+    res.redirect(303, "/ado-admin");
+    return;
+  }
+
   res.send(renderHomePage());
 });
 
@@ -2893,6 +3006,57 @@ app.post("/ado-admin/disconnect", (req, res) => {
   res.redirect(303, "/ado-admin");
 });
 
+app.get("/ado-admin/scope", async (req, res) => {
+  const session = getAdoSession(req);
+
+  if (!session) {
+    res.status(401).json({
+      error: "Your session expired. Paste your PAT again to continue."
+    });
+    return;
+  }
+
+  const selectedTeam = String(req.query.team || "").trim();
+
+  if (!selectedTeam) {
+    res.status(400).json({
+      error: "Choose a team first."
+    });
+    return;
+  }
+
+  try {
+    const [iterationsResult, areaPathsResult] = await Promise.all([
+      listTeamIterations({
+        pat: session.pat,
+        org: adoConfig.org,
+        project: adoConfig.project,
+        team: selectedTeam
+      }),
+      listTeamAreaPaths({
+        pat: session.pat,
+        org: adoConfig.org,
+        project: adoConfig.project,
+        team: selectedTeam
+      })
+    ]);
+    const defaultAreaPath = resolveSelectedAreaPath(areaPathsResult.areas, "", areaPathsResult.defaultValue);
+
+    res.json({
+      team: selectedTeam,
+      areaPaths: areaPathsResult.areas,
+      defaultAreaPath,
+      iterations: iterationsResult.iterations.map(formatIterationForClient)
+    });
+  } catch (error) {
+    const formattedError = formatAdoError(error);
+    res.status(formattedError.status).json({
+      error: formattedError.message,
+      detail: formattedError.detail
+    });
+  }
+});
+
 async function handleAdoReviewBuilder(req, res) {
   const session = getAdoSession(req);
 
@@ -2900,7 +3064,7 @@ async function handleAdoReviewBuilder(req, res) {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary ADO admin session expired. Paste the PAT again to build the sprint review."
+          message: "Your temporary SprintGen session expired. Paste the PAT again to build the sprint review."
         }
       })
     );
@@ -2943,7 +3107,7 @@ app.post("/ado-admin/generate-report", createJobId, async (req, res) => {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary ADO admin session expired. Paste the PAT again to generate the ADO report."
+          message: "Your temporary SprintGen session expired. Paste the PAT again to generate the ADO report."
         }
       })
     );
@@ -3032,7 +3196,7 @@ app.get("/ado-report/:id", (req, res) => {
     const paths = getJobPaths(req.params.id);
 
     if (!fs.existsSync(paths.adoDataPath)) {
-      res.status(404).send(renderErrorPage("That ADO report is no longer available. Please generate it again from ADO Admin Mode."));
+      res.status(404).send(renderErrorPage("That ADO report is no longer available. Please generate it again from SprintGen."));
       return;
     }
 
@@ -3050,7 +3214,7 @@ app.post("/ado-admin/presentation", createJobId, async (req, res) => {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary ADO admin session expired. Paste the PAT again to create a presentation."
+          message: "Your temporary SprintGen session expired. Paste the PAT again to create a presentation."
         }
       })
     );
@@ -3090,7 +3254,7 @@ app.get("/ado-present/:id", (req, res) => {
     const paths = getJobPaths(req.params.id);
 
     if (!fs.existsSync(paths.adoDataPath)) {
-      res.status(404).send(renderErrorPage("That ADO presentation is no longer available. Please create it again from ADO Admin Mode."));
+      res.status(404).send(renderErrorPage("That ADO presentation is no longer available. Please create it again from SprintGen."));
       return;
     }
 

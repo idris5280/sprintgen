@@ -32,20 +32,18 @@ http://localhost:3000
 
 From the browser, scrum masters can:
 
-- Start the ADO Sprint Review Builder.
-- Connect with a temporary Azure DevOps PAT.
-- Select a readable team and sprint.
+- Authorize with a temporary Azure DevOps PAT.
+- Choose the team, work area, and sprint in a guided flow.
+- Open the Sprint Review Builder directly.
 - Review ADO-calculated metrics, burndown, velocity, and work items.
 - Type summary, delivery updates, business value, and next steps on screen.
 - Attach real ADO stories to delivery updates and next-sprint plans.
 - Generate an ADO-backed HTML report, PDF, and Presentation Mode.
-- Download the sample workbook.
-- Upload a completed `.xlsx` workbook.
-- Generate a workbook-backed report.
 - Open the HTML preview.
 - Download the PDF.
 - Open Presentation Mode for same-day screen sharing.
-- Try the Phase 1 Azure DevOps data feasibility test.
+
+The workbook generator remains available through its routes and CLI for teams that need a spreadsheet fallback, but it is hidden from the normal scrum master flow.
 
 Uploaded workbooks and generated web outputs are stored under `runtime/jobs/<job-id>/` and cleaned up automatically after several hours. They are not written permanently to `output/`.
 
@@ -96,14 +94,13 @@ SprintGen includes an ADO-powered sprint review workflow:
 http://localhost:3000/ado-admin
 ```
 
-This mode is for trusted internal development while Microsoft Entra login is intentionally out of scope. The admin enters a read-capable Azure DevOps PAT once, and SprintGen keeps it only in server memory for the current browser session.
+This mode is for trusted internal development while Microsoft Entra login is intentionally out of scope. The scrum master enters a read-capable Azure DevOps PAT once, and SprintGen keeps it only in server memory for the current browser session.
 
 The Sprint Review Builder lets the scrum master:
 
-- connect to the configured ADO organization/project
-- list all readable project teams
-- select a team from a dropdown
-- load that team's area paths and iterations
+- authorize access to the configured ADO organization/project
+- choose a readable project team from a dropdown
+- unfold that team's area paths and iterations without leaving the page
 - select the exact area path and sprint/iteration path
 - open the review builder directly
 - type the executive summary
@@ -127,7 +124,7 @@ The ADO metrics flow is scoped by team, area path, and iteration path. It curren
 
 The burndown chart animates in the browser over roughly 3 seconds to make the sprint trend more presentation-friendly. Animation is reduced for users who prefer reduced motion.
 
-After selecting a team, area path, and sprint, use `Build Sprint Review` to open the on-screen editor. After generation, SprintGen writes the job to:
+After authorizing, selecting a team, and choosing the sprint details, use `Build Review` to open the on-screen editor. After generation, SprintGen writes the job to:
 
 ```text
 runtime/jobs/<job-id>/
@@ -223,7 +220,7 @@ Presentation Mode keeps the visual layer CSS-only. It does not add icon librarie
 
 ## Generate From The CLI
 
-The original command-line workflow still works:
+The original command-line workbook workflow still works:
 
 ```bash
 npm run generate
@@ -330,9 +327,11 @@ Rows appear in the Live Demo callout. This section is optional.
 
 ## Web Routes
 
-- `GET /` - SprintGen home page with ADO builder and workbook fallback
-- `GET /ado-admin` - connect PAT, choose team, choose area path, choose sprint
+- `GET /` - PAT-first SprintGen authorization screen
+- `GET /ado-admin` - same PAT-first screen when disconnected; guided team/sprint selection when connected
 - `POST /ado-admin/connect` - create the temporary in-memory PAT session
+- `POST /ado-admin/disconnect` - clear the temporary PAT session
+- `GET /ado-admin/scope?team=<teamName>` - return area paths and iterations for the selected team
 - `POST /ado-admin/preview` - legacy alias that now opens the Sprint Review Builder
 - `POST /ado-admin/review` - open the Sprint Review Builder for the selected team/area/sprint
 - `POST /ado-admin/generate-report` - generate ADO-backed HTML report and PDF
