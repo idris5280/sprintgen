@@ -141,7 +141,46 @@ body::after {
   display: grid;
   min-height: 100vh;
   padding: 56px clamp(18px, 4vw, 64px);
+  position: relative;
   scroll-snap-align: start;
+}
+
+.presentation-brand-rail {
+  color: #0d4d84;
+  display: flex;
+  justify-content: center;
+  left: 50%;
+  opacity: .9;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(220px, 52vw);
+  z-index: 2;
+}
+
+.presentation-brand-rail.is-top {
+  top: clamp(22px, 5vh, 46px);
+}
+
+.presentation-brand-rail.is-bottom {
+  bottom: clamp(22px, 5vh, 46px);
+}
+
+.presentation-brand-rail .brand-rail-logo {
+  display: block;
+  height: auto;
+  max-height: 28px;
+  width: 100%;
+}
+
+body.vibe-dark .presentation-brand-rail {
+  color: rgba(248, 250, 252, .9);
+}
+
+body.vibe-prismatic .presentation-brand-rail {
+  color: #dffcff;
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, .3));
+  opacity: .96;
 }
 
 .present-card {
@@ -161,6 +200,7 @@ body::after {
 
 .present-card::before {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  animation: none;
   content: "";
   height: 2px;
   left: -35%;
@@ -168,7 +208,10 @@ body::after {
   right: auto;
   top: 0;
   width: 35%;
-  animation: borderSweep 4s ease-in-out infinite;
+}
+
+.ado-present-slide.is-active .present-card::before {
+  animation: borderSweep 4s ease-in-out 1 both;
 }
 
 .present-card.wide {
@@ -276,6 +319,7 @@ dl div {
 .metric-card strong {
   display: block;
   font-size: clamp(2.2rem, 5vw, 4rem);
+  font-variant-numeric: tabular-nums;
   letter-spacing: -.05em;
   line-height: .95;
 }
@@ -370,6 +414,8 @@ dl div {
 
 .js-burndown .burn-dot {
   animation: none;
+  opacity: 0;
+  transform: scale(.75);
 }
 
 .js-burndown.is-burn-active .burn-dot {
@@ -380,45 +426,74 @@ dl div {
 .burn-dot.final {
   animation-delay: 2.95s;
   fill: #10212c;
-  opacity: 1;
   stroke: #ffd166;
   stroke-width: 4;
 }
 
-.burn-end-label rect {
-  fill: #10212c;
-  stroke: rgba(255, 255, 255, .72);
-  stroke-width: 1;
+.burn-outcome-marker circle {
+  filter: drop-shadow(0 8px 14px rgba(16, 33, 44, .18));
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
-.burn-end-label text {
-  fill: #ffffff !important;
-  font-size: 12px;
-  font-weight: 850;
-  paint-order: stroke;
-  stroke: rgba(16, 33, 44, .55);
-  stroke-width: 2px;
-  text-anchor: middle;
+.burn-outcome-marker path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
 }
 
-body.vibe-dark .burn-end-label rect {
-  fill: #f4f7fb;
+.burn-outcome-marker .marker-dot {
+  stroke: none;
+}
+
+.burn-outcome-marker.is-complete circle {
+  fill: #1b8a45;
   stroke: rgba(255, 255, 255, .92);
 }
 
-body.vibe-dark .burn-end-label text {
-  fill: #050607 !important;
-  stroke: rgba(255, 255, 255, .5);
+.burn-outcome-marker.is-complete path {
+  stroke: #ffffff;
 }
 
-body.vibe-prismatic .burn-end-label rect {
-  fill: #10112b;
-  stroke: rgba(0, 240, 255, .85);
+.burn-outcome-marker.is-improve circle {
+  fill: #ffd166;
+  stroke: #10212c;
 }
 
-body.vibe-prismatic .burn-end-label text {
-  fill: #ffffff !important;
-  stroke: rgba(16, 17, 43, .72);
+.burn-outcome-marker.is-improve path {
+  stroke: #10212c;
+}
+
+.burn-outcome-marker.is-improve .marker-dot {
+  fill: #10212c;
+}
+
+.js-burndown .burn-outcome-marker {
+  opacity: 0;
+}
+
+.js-burndown .burn-outcome-marker circle {
+  transform: scale(.72);
+}
+
+.js-burndown.is-burn-active .burn-outcome-marker {
+  animation: burnMarkerIn .36s cubic-bezier(.2, 1.3, .32, 1) 2.95s forwards;
+}
+
+.js-burndown.is-burn-active .burn-outcome-marker circle {
+  animation: burnMarkerCircleIn .36s cubic-bezier(.2, 1.3, .32, 1) 2.95s forwards;
+}
+
+body.vibe-dark .burn-outcome-marker.is-complete circle {
+  fill: #30d470;
+  stroke: #f4f7fb;
+}
+
+body.vibe-prismatic .burn-outcome-marker.is-complete circle {
+  fill: #00f0a8;
+  stroke: #ffffff;
 }
 
 .chart-caption {
@@ -616,7 +691,7 @@ body.vibe-prismatic .velocity-points {
   padding: 16px;
 }
 
-.present-contributors span {
+.present-contributors > span {
   color: var(--blue);
   display: block;
   font-size: .68rem;
@@ -626,12 +701,33 @@ body.vibe-prismatic .velocity-points {
   text-transform: uppercase;
 }
 
-.present-contributors p {
+.present-contributor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.present-contributor-list span {
+  background: rgba(255, 255, 255, .52);
+  border: 1px solid var(--line);
+  border-radius: 999px;
   color: var(--ink);
-  font-size: clamp(.92rem, 1.6vw, 1.08rem);
-  font-weight: 750;
-  line-height: 1.45;
-  margin: 0;
+  display: inline-flex;
+  font-size: clamp(.66rem, 1.1vw, .82rem);
+  font-weight: 850;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+body.vibe-dark .present-contributor-list span {
+  background: rgba(255, 255, 255, .1);
+  color: #f8fafc;
+}
+
+body.vibe-prismatic .present-contributor-list span {
+  background: rgba(16, 17, 43, .68);
+  border-color: rgba(0, 240, 255, .4);
+  color: #ffffff;
 }
 
 .present-narrative-grid {
@@ -665,12 +761,72 @@ body.vibe-prismatic .velocity-points {
   margin: 8px 0;
 }
 
+.delivery-story-pill {
+  margin-top: 18px;
+}
+
 .present-business-value {
   background:
-    radial-gradient(circle at 94% 4%, rgba(255, 209, 102, .38), transparent 34%),
-    #fff6d8;
-  border-color: #ffe39a;
+    radial-gradient(circle at 94% 8%, rgba(255, 255, 255, .82), transparent 18%),
+    radial-gradient(circle at 12% 16%, rgba(27, 138, 69, .2), transparent 32%),
+    linear-gradient(135deg, rgba(236, 255, 245, .96), rgba(255, 246, 216, .98) 48%, rgba(255, 255, 255, .94));
+  border-color: rgba(27, 138, 69, .34);
+  box-shadow: 0 18px 44px rgba(27, 138, 69, .12), inset 0 1px 0 rgba(255, 255, 255, .72);
   margin-top: 18px;
+  overflow: hidden;
+  position: relative;
+}
+
+.present-business-value::before {
+  background: #ffffff;
+  border-radius: 999px;
+  box-shadow:
+    -30px 8px 0 0 rgba(255, 209, 102, .92),
+    -14px -12px 0 1px rgba(255, 255, 255, .94),
+    8px 10px 0 0 rgba(27, 138, 69, .72),
+    22px -8px 0 1px rgba(255, 209, 102, .76),
+    34px 14px 0 0 rgba(255, 255, 255, .88),
+    48px -2px 0 0 rgba(27, 138, 69, .58);
+  content: "";
+  height: 3px;
+  opacity: .52;
+  pointer-events: none;
+  position: absolute;
+  right: 34px;
+  top: 24px;
+  transform: translateY(0) scale(1);
+  width: 3px;
+  z-index: 0;
+}
+
+.present-business-value::after {
+  background: rgba(255, 209, 102, .96);
+  border-radius: 999px;
+  box-shadow:
+    -46px 4px 0 0 rgba(255, 255, 255, .9),
+    -28px -10px 0 1px rgba(27, 138, 69, .64),
+    -10px 12px 0 0 rgba(255, 209, 102, .9),
+    12px -6px 0 0 rgba(255, 255, 255, .86),
+    26px 12px 0 1px rgba(27, 138, 69, .54),
+    42px -14px 0 0 rgba(255, 209, 102, .8);
+  content: "";
+  height: 3px;
+  opacity: .48;
+  pointer-events: none;
+  position: absolute;
+  right: 74px;
+  bottom: 24px;
+  transform: translateY(0) scale(1);
+  width: 3px;
+  z-index: 0;
+}
+
+.ado-present-slide.is-active .present-business-value::before {
+  animation: businessValueSparkleFloatA 7.5s ease-in-out infinite alternate;
+}
+
+.ado-present-slide.is-active .present-business-value::after {
+  animation: businessValueSparkleFloatB 8.5s ease-in-out infinite alternate;
 }
 
 .present-business-value span,
@@ -692,6 +848,93 @@ body.vibe-prismatic .velocity-points {
   font-weight: 700;
   line-height: 1.6;
   margin: 0;
+}
+
+.present-business-value span,
+.present-business-value p {
+  position: relative;
+  z-index: 1;
+}
+
+.present-business-value span {
+  color: #1b8a45;
+}
+
+body.vibe-dark .present-business-value {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(255, 209, 102, .3), transparent 24%),
+    linear-gradient(135deg, rgba(23, 58, 35, .94), rgba(79, 66, 23, .92));
+  border-color: rgba(255, 209, 102, .48);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .28), 0 0 32px rgba(255, 209, 102, .12);
+}
+
+body.vibe-dark .present-business-value span {
+  color: #a8f0bd;
+}
+
+body.vibe-dark .present-business-value p {
+  color: #f8fff9;
+}
+
+body.vibe-dark .present-business-value::before {
+  background: #fff8d8;
+  box-shadow:
+    -30px 8px 0 0 rgba(255, 209, 102, .95),
+    -14px -12px 0 1px rgba(255, 255, 255, .9),
+    8px 10px 0 0 rgba(168, 240, 189, .82),
+    22px -8px 0 1px rgba(255, 209, 102, .8),
+    34px 14px 0 0 rgba(255, 255, 255, .84),
+    48px -2px 0 0 rgba(168, 240, 189, .68);
+}
+
+body.vibe-dark .present-business-value::after {
+  background: #ffd166;
+  box-shadow:
+    -46px 4px 0 0 rgba(255, 255, 255, .86),
+    -28px -10px 0 1px rgba(168, 240, 189, .76),
+    -10px 12px 0 0 rgba(255, 209, 102, .92),
+    12px -6px 0 0 rgba(255, 255, 255, .82),
+    26px 12px 0 1px rgba(168, 240, 189, .62),
+    42px -14px 0 0 rgba(255, 209, 102, .82);
+}
+
+body.vibe-prismatic .present-business-value {
+  background:
+    radial-gradient(circle at 88% 10%, rgba(0, 240, 255, .22), transparent 24%),
+    radial-gradient(circle at 8% 14%, rgba(255, 230, 109, .3), transparent 28%),
+    linear-gradient(135deg, rgba(10, 45, 34, .92), rgba(77, 42, 101, .88));
+  border-color: rgba(255, 230, 109, .66);
+  box-shadow: 0 0 36px rgba(0, 240, 255, .14), 0 20px 52px rgba(255, 61, 242, .12);
+}
+
+body.vibe-prismatic .present-business-value span {
+  color: #ffe66d;
+}
+
+body.vibe-prismatic .present-business-value p {
+  color: #ffffff;
+}
+
+body.vibe-prismatic .present-business-value::before {
+  background: #ffffff;
+  box-shadow:
+    -30px 8px 0 0 rgba(255, 230, 109, .96),
+    -14px -12px 0 1px rgba(0, 240, 255, .88),
+    8px 10px 0 0 rgba(0, 240, 168, .82),
+    22px -8px 0 1px rgba(255, 61, 242, .72),
+    34px 14px 0 0 rgba(255, 255, 255, .9),
+    48px -2px 0 0 rgba(255, 230, 109, .72);
+}
+
+body.vibe-prismatic .present-business-value::after {
+  background: #ffe66d;
+  box-shadow:
+    -46px 4px 0 0 rgba(255, 255, 255, .86),
+    -28px -10px 0 1px rgba(0, 240, 255, .82),
+    -10px 12px 0 0 rgba(255, 230, 109, .9),
+    12px -6px 0 0 rgba(255, 61, 242, .72),
+    26px 12px 0 1px rgba(0, 240, 168, .7),
+    42px -14px 0 0 rgba(255, 230, 109, .82);
 }
 
 .linked-story-list {
@@ -900,16 +1143,35 @@ body.vibe-prismatic .story-summary-pill strong {
 }
 
 .present-controls button {
-  background: rgba(255, 255, 255, .86);
+  align-items: center;
+  background: rgba(255, 255, 255, .88);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   color: var(--ink);
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
-  font-size: .78rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  min-height: 40px;
-  padding: 9px 12px;
+  height: 42px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 42px;
+}
+
+body.vibe-dark .present-controls button {
+  background: rgba(244, 247, 251, .1);
+  border-color: rgba(244, 247, 251, .34);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .32);
+  color: #f4f7fb;
+}
+
+body.vibe-prismatic .present-controls button {
+  background: rgba(16, 17, 43, .74);
+  border-color: rgba(0, 240, 255, .52);
+  box-shadow: 0 0 22px rgba(255, 61, 242, .18);
+  color: #ffffff;
 }
 
 @keyframes burnDraw {
@@ -922,6 +1184,78 @@ body.vibe-prismatic .story-summary-pill strong {
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes burnMarkerIn {
+  0% {
+    opacity: 0;
+  }
+
+  62% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes burnMarkerCircleIn {
+  0% {
+    transform: scale(.72);
+  }
+
+  70% {
+    transform: scale(1.14);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes businessValueSparkleFloatA {
+  0% {
+    opacity: .42;
+    transform: translate(0, 0) scale(1);
+  }
+
+  34% {
+    opacity: .78;
+    transform: translate(-8px, -7px) scale(1.1);
+  }
+
+  68% {
+    opacity: .56;
+    transform: translate(5px, -12px) scale(.96);
+  }
+
+  100% {
+    opacity: .72;
+    transform: translate(-3px, 4px) scale(1.04);
+  }
+}
+
+@keyframes businessValueSparkleFloatB {
+  0% {
+    opacity: .36;
+    transform: translate(0, 0) scale(.98);
+  }
+
+  42% {
+    opacity: .76;
+    transform: translate(7px, -9px) scale(1.1);
+  }
+
+  74% {
+    opacity: .52;
+    transform: translate(-6px, -4px) scale(.94);
+  }
+
+  100% {
+    opacity: .68;
+    transform: translate(3px, 6px) scale(1.02);
   }
 }
 
@@ -951,11 +1285,38 @@ body.vibe-prismatic .story-summary-pill strong {
     transform: scaleX(1);
     transition: none;
   }
+
+  .burn-outcome-marker {
+    animation: none;
+    opacity: 1;
+  }
+
+  .burn-outcome-marker circle {
+    animation: none;
+    transform: scale(1);
+  }
+
+  .present-business-value::before,
+  .present-business-value::after {
+    animation: none !important;
+  }
 }
 
 @media (max-width: 820px) {
   .ado-present-slide {
     padding: 42px 14px;
+  }
+
+  .presentation-brand-rail {
+    width: min(190px, 54vw);
+  }
+
+  .presentation-brand-rail.is-top {
+    top: 20px;
+  }
+
+  .presentation-brand-rail.is-bottom {
+    bottom: 58px;
   }
 
   dl,
@@ -977,11 +1338,10 @@ body.vibe-prismatic .story-summary-pill strong {
 
   .present-controls {
     bottom: 10px;
-    left: 10px;
     right: 10px;
   }
 
   .present-controls button {
-    flex: 1;
+    flex: 0 0 42px;
   }
 }

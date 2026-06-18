@@ -300,6 +300,37 @@ function buildAreaWiqlFilter(areaPath) {
   return areaPath ? `AND [System.AreaPath] = '${escapeWiqlString(areaPath)}'` : "";
 }
 
+function uniqueValues(values) {
+  return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function normalizeFieldName(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+async function listWorkItemFields({ pat, org, project }) {
+  const baseUrl = buildDevOpsBaseUrl({ org, project });
+  const url = `${baseUrl}/_apis/wit/fields?api-version=7.1`;
+  const response = await requestJson(url, { pat });
+
+  return Array.isArray(response.value) ? response.value : [];
+}
+
+async function discoverTestedByFieldReferences({ pat, org, project }) {
+  const configured = uniqueValues([process.env.ADO_TESTED_BY_FIELD]);
+  const fields = await listWorkItemFields({ pat, org, project });
+  const discovered = fields
+    .filter((field) => {
+      const displayName = normalizeFieldName(field.name);
+      const referenceName = normalizeFieldName(field.referenceName);
+
+      return displayName === "testedby" || referenceName.endsWith("testedby");
+    })
+    .map((field) => field.referenceName);
+
+  return uniqueValues([...configured, ...discovered]);
+}
+
 async function queryStoryPointBurndown({ pat, org, project, team, iterationPath, areaPath = "" }) {
   const apply = [
     "filter(",
@@ -424,18 +455,19 @@ async function queryCurrentSprintWorkItemsFromAnalytics({ pat, org, project, tea
   };
 }
 
-async function queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath = "" }) {
+async function queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath = "", extraFields = [] }) {
   const baseUrl = buildDevOpsBaseUrl({ org, project });
   const wiqlUrl = `${baseUrl}/_apis/wit/wiql?api-version=7.1`;
   const selectFields = ["[System.Id]", "[System.Title]", "[System.State]", "[System.WorkItemType]", "[System.AssignedTo]"];
-  const batchFields = [
+  const batchFields = uniqueValues([
     "System.Id",
     "System.Title",
     "System.State",
     "System.WorkItemType",
     "System.AssignedTo",
-    "Microsoft.VSTS.Scheduling.StoryPoints"
-  ];
+    "Microsoft.VSTS.Scheduling.StoryPoints",
+    ...extraFields
+  ]);
 
   const query = [
     `SELECT ${selectFields.join(", ")}`,
@@ -495,8 +527,36 @@ function getAssignedToValue(item) {
   return (item && (item.AssignedTo || item.assignedTo)) || fields["System.AssignedTo"] || "";
 }
 
+function getTestedByValue(item, fieldRefs = []) {
+  const fields = item && item.fields ? item.fields : {};
+  const directValue = item && (item.TestedBy || item.testedBy);
+
+  if (directValue) {
+    return directValue;
+  }
+
+  for (const fieldRef of fieldRefs) {
+    if (fields[fieldRef]) {
+      return fields[fieldRef];
+    }
+  }
+
+  return (
+    fields.TestedBy ||
+    fields["Custom.TestedBy"] ||
+    fields["Microsoft.VSTS.Common.TestedBy"] ||
+    fields["Microsoft.VSTS.CMMI.TestedBy"] ||
+    Object.entries(fields).find(([key, value]) => normalizeFieldName(key).endsWith("testedby") && value)?.[1] ||
+    ""
+  );
+}
+
 function countAssignedItems(items) {
   return (items || []).filter((item) => Boolean(getAssignedToValue(item))).length;
+}
+
+function countContributorFieldItems(items, testedByFieldRefs = []) {
+  return (items || []).filter((item) => Boolean(getAssignedToValue(item) || getTestedByValue(item, testedByFieldRefs))).length;
 }
 
 function appendResultWarning(result, warning) {
@@ -510,41 +570,83 @@ function appendResultWarning(result, warning) {
 async function enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterationPath, areaPath = "", missingWarning = "" }) {
   const items = Array.isArray(result.items) ? result.items : [];
 
-  if (items.length === 0 || countAssignedItems(items) === items.length) {
+  if (items.length === 0) {
+    return result;
+  }
+
+  let testedByFieldRefs = [];
+
+  try {
+    testedByFieldRefs = await discoverTestedByFieldReferences({ pat, org, project });
+  } catch (error) {
+    result.testedByFieldDiscoveryError = error.message;
+  }
+
+  const needsAssignedTo = countAssignedItems(items) !== items.length;
+  const canRequestTestedBy = testedByFieldRefs.length > 0;
+
+  if (!needsAssignedTo && !canRequestTestedBy) {
     return result;
   }
 
   try {
-    const wiqlResult = await queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath });
+    const wiqlResult = await queryCurrentSprintWorkItemsFromWiql({
+      pat,
+      org,
+      project,
+      iterationPath,
+      areaPath,
+      extraFields: testedByFieldRefs
+    });
     const assignedById = new Map();
+    const testedById = new Map();
 
     for (const item of wiqlResult.items || []) {
       const id = getWorkItemId(item);
       const assignedTo = getAssignedToValue(item);
+      const testedBy = getTestedByValue(item, testedByFieldRefs);
 
       if (id && assignedTo) {
         assignedById.set(id, assignedTo);
       }
+
+      if (id && testedBy) {
+        testedById.set(id, testedBy);
+      }
     }
 
-    if (assignedById.size > 0) {
+    if (assignedById.size > 0 || testedById.size > 0) {
       result.items = items.map((item) => {
-        if (getAssignedToValue(item)) {
-          return item;
+        const updates = {};
+        const assignedTo = assignedById.get(getWorkItemId(item));
+        const testedBy = testedById.get(getWorkItemId(item));
+
+        if (assignedTo && !getAssignedToValue(item)) {
+          updates.AssignedTo = assignedTo;
         }
 
-        const assignedTo = assignedById.get(getWorkItemId(item));
-        return assignedTo ? { ...item, AssignedTo: assignedTo } : item;
+        if (testedBy && !getTestedByValue(item, testedByFieldRefs)) {
+          updates.TestedBy = testedBy;
+        }
+
+        return Object.keys(updates).length > 0 ? { ...item, ...updates } : item;
       });
-      result.assignedToSource = "WIQL System.AssignedTo";
+
+      if (assignedById.size > 0) {
+        result.assignedToSource = "WIQL System.AssignedTo";
+      }
+
+      if (testedById.size > 0) {
+        result.testedBySource = `WIQL ${testedByFieldRefs.join(", ")}`;
+      }
     }
 
-    if (countAssignedItems(result.items) === 0) {
-      appendResultWarning(result, missingWarning || "System.AssignedTo was not returned for the selected sprint work items.");
+    if (countContributorFieldItems(result.items, testedByFieldRefs) === 0) {
+      appendResultWarning(result, missingWarning || "Contributor names were not returned from Assigned To or Tested By fields for the selected sprint work items.");
     }
   } catch (error) {
     result.assignedToError = error.message;
-    appendResultWarning(result, missingWarning || "System.AssignedTo could not be loaded from WIQL for the selected sprint work items.");
+    appendResultWarning(result, missingWarning || "Contributor names could not be loaded from WIQL for the selected sprint work items.");
   }
 
   return result;

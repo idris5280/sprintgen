@@ -1,6 +1,6 @@
 # SprintGen
 
-SprintGen builds polished sprint review reports from Azure DevOps facts and scrum-master-approved narrative. Scrum masters connect with a temporary PAT, choose a team and sprint, review ADO metrics and story wording, write the delivery context on screen, then generate an HTML report, PDF, and Presentation Mode.
+SprintGen builds polished sprint review reports from Azure DevOps facts and scrum-master-approved narrative. Scrum masters connect with a temporary PAT, choose a team and sprint, review ADO metrics and story wording, write the delivery context on screen, then generate a standalone HTML report and Presentation Mode.
 
 The original Excel workbook generator still works as a fallback for teams that prefer spreadsheet-driven reporting. The workbook flow intentionally keeps charts out of scope. The ADO-powered flow now highlights current sprint burndown, 3-sprint velocity, completion rate, completed items, and delivered story points.
 
@@ -38,9 +38,9 @@ From the browser, scrum masters can:
 - Review ADO-calculated metrics, burndown, velocity, and work items.
 - Type summary, delivery updates, business value, and next steps on screen.
 - Attach real ADO stories to delivery updates and next-sprint plans.
-- Generate an ADO-backed HTML report, PDF, and Presentation Mode.
+- Generate an ADO-backed standalone HTML report and Presentation Mode.
 - Open the HTML preview.
-- Download the PDF.
+- Download the standalone HTML report.
 - Open Presentation Mode for same-day screen sharing.
 
 The workbook generator remains available through its routes and CLI for teams that need a spreadsheet fallback, but it is hidden from the normal scrum master flow.
@@ -112,7 +112,7 @@ The Sprint Review Builder lets the scrum master:
 - edit the opening remarks title/subtitle for Presentation Mode
 - see the next sprint's ADO stories when the team iteration exists
 - attach next sprint stories to the Looking Ahead section
-- generate the ADO-backed HTML report, PDF, and Presentation Mode
+- generate the ADO-backed standalone HTML report and Presentation Mode
 
 The ADO metrics flow is scoped by team, area path, and iteration path. It currently calculates:
 
@@ -142,7 +142,7 @@ Generated ADO outputs are available through:
 The ADO presentation breaks the selected sprint review into full-screen sections:
 
 - sprint title/team/date slide
-- contributor recognition from ADO `AssignedTo`, when available
+- contributor recognition from ADO `AssignedTo` and `Tested By`, when available
 - editable opening remarks slide
 - sprint health metrics
 - agile metrics story point trend
@@ -163,7 +163,7 @@ Security behavior:
 - PAT is cleared when the server restarts, the session expires, or the user disconnects
 - the browser stores only a random HttpOnly session id cookie
 
-Generated jobs store ADO facts and the approved narrative, not the PAT. Runtime presentation links are temporary same-day links; the PDF remains the durable artifact.
+Generated jobs store ADO facts and the approved narrative, not the PAT. Runtime presentation links are temporary same-day links; the downloaded standalone HTML report is the durable artifact.
 
 ## Live Azure App
 
@@ -212,9 +212,9 @@ ADO-generated sprint reviews use:
 /ado-present/<job-id>?vibe=prismatic
 ```
 
-The ADO presentation uses the selected sprint metrics, animated burndown, animated 3-sprint velocity, approved summary, delivery updates, business value, selected completed ADO stories, selected next sprint ADO stories, and contributor names from ADO `AssignedTo` when available.
+The ADO presentation uses the selected sprint metrics, animated burndown, animated 3-sprint velocity, approved summary, delivery updates, business value, selected completed ADO stories, selected next sprint ADO stories, and contributor names from ADO `AssignedTo` plus `Tested By` when available.
 
-The Presentation Mode screen does not change the durable PDF output. The PDF remains the normal report layout.
+The Presentation Mode screen does not change the downloadable report. The standalone HTML report remains the durable screen-friendly artifact.
 
 Presentation Mode keeps the visual layer CSS-only. It does not add icon libraries, image assets, emoji decorations, chart dashboards, or extra maintained slide content. The ADO deck only uses the focused burndown and velocity visuals generated from ADO data.
 
@@ -334,7 +334,7 @@ Rows appear in the Live Demo callout. This section is optional.
 - `GET /ado-admin/scope?team=<teamName>` - return area paths and iterations for the selected team
 - `POST /ado-admin/preview` - legacy alias that now opens the Sprint Review Builder
 - `POST /ado-admin/review` - open the Sprint Review Builder for the selected team/area/sprint
-- `POST /ado-admin/generate-report` - generate ADO-backed HTML report and PDF
+- `POST /ado-admin/generate-report` - generate ADO-backed HTML report, with PDF attempted as a legacy optional artifact
 - `GET /ado-report/:id` - ADO report result page
 - `GET /ado-present/:id` - ADO Presentation Mode
 - `GET /ado-test` - ADO feasibility test

@@ -41,9 +41,58 @@ function normalizeIdentity(value) {
   return String(value).replace(/\s*<[^>]+>\s*$/, "").trim();
 }
 
+function normalizeIdentityList(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeIdentity).filter(Boolean);
+  }
+
+  if (typeof value === "object") {
+    return [normalizeIdentity(value)].filter(Boolean);
+  }
+
+  return String(value)
+    .split(";")
+    .map(normalizeIdentity)
+    .filter(Boolean);
+}
+
+function getTestedByField(item) {
+  const fields = item && item.fields ? item.fields : item || {};
+
+  return (
+    fields.TestedBy ||
+    fields.testedBy ||
+    fields["Custom.TestedBy"] ||
+    fields["Microsoft.VSTS.Common.TestedBy"] ||
+    fields["Microsoft.VSTS.CMMI.TestedBy"] ||
+    Object.entries(fields).find(([key, value]) => normalize(key).replace(/[^a-z0-9]+/g, "").endsWith("testedby") && value)?.[1] ||
+    ""
+  );
+}
+
+function cleanContributorDisplayName(value) {
+  const cleaned = normalizeIdentity(value)
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/_/g, " ")
+    .replace(/\bX\s*-\s*/gi, "")
+    .replace(/^\s*X+\s+/i, "")
+    .replace(/\s+X+\s*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.-])/g, "$1")
+    .replace(/^[,.-]\s*|\s*[,.-]$/g, "")
+    .trim();
+
+  return cleaned;
+}
+
 function normalizeWorkItem(item) {
   const storyPoints = getField(item, "Microsoft.VSTS.Scheduling.StoryPoints", "StoryPoints");
   const assignedTo = getField(item, "System.AssignedTo", "AssignedTo");
+  const testedBy = getTestedByField(item);
 
   return {
     id: getField(item, "System.Id", "WorkItemId") || item.id || "",
@@ -55,7 +104,8 @@ function normalizeWorkItem(item) {
     assignedTo: normalizeIdentity(assignedTo),
     createdDate: getField(item, "System.CreatedDate", "CreatedDate") || "",
     changedDate: getField(item, "System.ChangedDate", "ChangedDate") || "",
-    tags: getField(item, "System.Tags", "Tags") || ""
+    tags: getField(item, "System.Tags", "Tags") || "",
+    testedBy: normalizeIdentityList(testedBy)
   };
 }
 
@@ -230,11 +280,15 @@ function summarizeContributors(items) {
   const contributors = new Map();
 
   for (const item of items || []) {
-    const name = item.assignedTo;
-    const key = normalize(name);
+    const names = [item.assignedTo, ...(item.testedBy || [])];
 
-    if (key && !contributors.has(key)) {
-      contributors.set(key, name);
+    for (const name of names) {
+      const displayName = cleanContributorDisplayName(name);
+      const key = normalize(displayName);
+
+      if (key && !contributors.has(key)) {
+        contributors.set(key, displayName);
+      }
     }
   }
 

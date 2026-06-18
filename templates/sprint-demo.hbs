@@ -42,6 +42,22 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    .brand-rail {
+      align-items: center;
+      background: var(--paper);
+      border-bottom: 1px solid var(--bdr);
+      display: flex;
+      min-height: 34px;
+      padding: 7px 32px;
+    }
+
+    .brand-rail-logo {
+      display: block;
+      height: auto;
+      max-height: 22px;
+      width: min(178px, 48vw);
+    }
+
     .header-bar {
       align-items: center;
       background: var(--paper);
@@ -439,6 +455,10 @@
     }
 
     @media (max-width: 720px) {
+      .brand-rail {
+        padding: 7px 20px;
+      }
+
       .header-bar {
         padding: 12px 20px;
       }
@@ -504,6 +524,8 @@
   </style>
 </head>
 <body>
+  {{{brandRailHtml}}}
+
   <header class="header-bar">
     <div class="brand-mark" aria-hidden="true">
       <span></span>

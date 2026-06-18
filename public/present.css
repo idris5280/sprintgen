@@ -302,6 +302,44 @@ body:not(.vibe-prismatic) .sparkle {
   scroll-snap-stop: always;
 }
 
+.presentation-brand-rail {
+  color: #0d4d84;
+  display: flex;
+  justify-content: center;
+  left: 50%;
+  opacity: .9;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(220px, 52vw);
+  z-index: 2;
+}
+
+.presentation-brand-rail.is-top {
+  top: clamp(74px, 10vh, 98px);
+}
+
+.presentation-brand-rail.is-bottom {
+  bottom: clamp(58px, 8vh, 82px);
+}
+
+.presentation-brand-rail .brand-rail-logo {
+  display: block;
+  height: auto;
+  max-height: 28px;
+  width: 100%;
+}
+
+.vibe-dark .presentation-brand-rail {
+  color: rgba(248, 250, 252, .9);
+}
+
+.vibe-prismatic .presentation-brand-rail {
+  color: #dffcff;
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, .3));
+  opacity: .96;
+}
+
 .hero-slide::before,
 .hero-slide::after,
 .closing-slide::before,
@@ -356,7 +394,11 @@ body:not(.vibe-prismatic) .sparkle {
   padding: clamp(28px, 5vw, 64px);
   position: relative;
   width: min(100%, 1160px);
-  animation: borderShimmer var(--border-speed) linear infinite, cardFloat 8s ease-in-out infinite alternate;
+  animation: cardFloat 8s ease-in-out infinite alternate;
+}
+
+.slide.is-active .slide-shell {
+  animation: borderShimmer var(--border-speed) linear 1 both, cardFloat 8s ease-in-out infinite alternate;
 }
 
 .slide-shell::before {
@@ -639,18 +681,37 @@ h3 {
 }
 
 .present-controls button {
+  align-items: center;
   background: color-mix(in srgb, var(--paper-strong), transparent 8%);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   box-shadow: 0 12px 34px rgba(23, 37, 50, .14);
   color: var(--ink);
   cursor: pointer;
+  display: inline-flex;
   font: inherit;
-  font-size: .82rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  min-width: 110px;
-  padding: 12px 14px;
+  height: 42px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
   pointer-events: auto;
+  width: 42px;
+}
+
+.vibe-dark .present-controls button {
+  background: rgba(244, 247, 251, .1);
+  border-color: rgba(244, 247, 251, .34);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .32);
+  color: #f4f7fb;
+}
+
+.vibe-prismatic .present-controls button {
+  background: rgba(16, 17, 43, .74);
+  border-color: rgba(0, 240, 255, .52);
+  box-shadow: 0 0 22px rgba(255, 61, 242, .18);
+  color: #ffffff;
 }
 
 .present-controls button:disabled {
@@ -729,6 +790,18 @@ h3 {
     padding: 132px 14px 84px;
   }
 
+  .presentation-brand-rail {
+    width: min(190px, 52vw);
+  }
+
+  .presentation-brand-rail.is-top {
+    top: 94px;
+  }
+
+  .presentation-brand-rail.is-bottom {
+    bottom: 62px;
+  }
+
   .slide-shell {
     padding: 28px 22px;
   }
@@ -764,8 +837,7 @@ h3 {
   }
 
   .present-controls button {
-    flex: 1;
-    min-width: 0;
+    flex: 0 0 42px;
   }
 
   .statement-card,

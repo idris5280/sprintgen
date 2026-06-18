@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const Handlebars = require("handlebars");
 const { chromium } = require("playwright");
+const { renderBrandRail } = require("./brandRail");
 const { readWorkbook } = require("./readWorkbook");
 const { registerHelpers } = require("./templateHelpers");
 
@@ -26,6 +27,9 @@ function renderHtml(workbookPath) {
   const data = readWorkbook(workbookPath);
   const html = template({
     ...data,
+    brandRailHtml: renderBrandRail({
+      className: "brand-rail report-brand-rail"
+    }),
     generatedAt: new Date().toISOString().slice(0, 10)
   });
 
@@ -42,6 +46,14 @@ function renderPresentationHtml(workbookPath, vibe) {
   const html = template({
     ...data,
     vibe: presentationVibe,
+    presentationBrandRailTop: renderBrandRail({
+      mono: true,
+      className: "presentation-brand-rail is-top"
+    }),
+    presentationBrandRailBottom: renderBrandRail({
+      mono: true,
+      className: "presentation-brand-rail is-bottom"
+    }),
     generatedAt: new Date().toISOString().slice(0, 10)
   });
 

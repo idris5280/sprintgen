@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 const multer = require("multer");
+const { renderBrandRail } = require("./brandRail");
 const { exportPdf, generateReport, normalizePresentationVibe, projectRoot, renderPresentationHtml } = require("./reportGenerator");
 const {
   fetchAnalyticsMetadata,
@@ -59,6 +60,10 @@ function sanitizeDownloadName(value) {
     .replace(/^-+|-+$/g, "");
 
   return clean || "sprint-demo";
+}
+
+function getHtmlDownloadName(value) {
+  return `${sanitizeDownloadName(value || "sprint-review")}.html`;
 }
 
 function parseCookies(req) {
@@ -250,16 +255,16 @@ function renderResultPage({ jobId, data }) {
         <div class="success-orb">yay</div>
         <div class="eyebrow">Report ready</div>
         <h1>${escapeHtml(data.basics.SprintName)} is ready to show off.</h1>
-        <p class="lede">Your sprint review is packaged into a polished HTML preview and a PDF download.</p>
+        <p class="lede">Your sprint review is packaged into a polished standalone HTML file for sharing or screen viewing.</p>
         ${warningHtml}
         <div class="result-actions">
-          <a class="primary-button" href="/preview/${encodeURIComponent(jobId)}" target="_blank" rel="noreferrer">Open HTML preview</a>
-          <a class="secondary-button strong" href="/download/${encodeURIComponent(jobId)}">Download PDF</a>
+          <a class="primary-button" href="/download-html/${encodeURIComponent(jobId)}">Download HTML</a>
+          <a class="secondary-button strong" href="/preview/${encodeURIComponent(jobId)}" target="_blank" rel="noreferrer">Open HTML report</a>
           <a class="ghost-button" href="/">Generate another report</a>
         </div>
         <div class="present-launch">
           <span>Presentation Mode</span>
-          <p>Temporary browser links for same-day screen sharing. The PDF remains the durable artifact.</p>
+          <p>Temporary browser links for same-day screen sharing. The downloaded HTML is the durable report artifact.</p>
           <strong>Select a mode:</strong>
           <div class="present-launch-actions">
             <a class="secondary-button" href="/present/${encodeURIComponent(jobId)}?vibe=light" target="_blank" rel="noreferrer">Light</a>
@@ -313,6 +318,16 @@ function formatNumber(value) {
 function normalizeStatusCode(status) {
   const number = Number(status);
   return number >= 400 && number <= 599 ? number : 500;
+}
+
+function isContributorFieldWarning(warning) {
+  return /AssignedTo|Assigned To|Contributor names|contributor names|could not fill contributor/i.test(String(warning || ""));
+}
+
+function filterContributorWarnings(warnings, contributors) {
+  const hasContributors = Array.isArray(contributors) && contributors.length > 0;
+
+  return (warnings || []).filter((warning) => warning && (!hasContributors || !isContributorFieldWarning(warning)));
 }
 
 function formatAdoError(error) {
@@ -409,6 +424,45 @@ function renderAdoWorkItems(items) {
   `;
 }
 
+function getMetricAnimationParts(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^([^0-9-]*)(-?\d+(?:\.\d+)?)(.*)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const target = Number(match[2]);
+
+  if (!Number.isFinite(target)) {
+    return null;
+  }
+
+  const decimalPart = match[2].split(".")[1] || "";
+
+  return {
+    prefix: match[1] || "",
+    target,
+    suffix: match[3] || "",
+    decimals: decimalPart.length
+  };
+}
+
+function renderMetricAnimationAttributes(value) {
+  const parts = getMetricAnimationParts(value);
+
+  if (!parts) {
+    return "";
+  }
+
+  return [
+    `data-count-target="${escapeHtml(parts.target)}"`,
+    `data-count-prefix="${escapeHtml(parts.prefix)}"`,
+    `data-count-suffix="${escapeHtml(parts.suffix)}"`,
+    `data-count-decimals="${escapeHtml(parts.decimals)}"`
+  ].join(" ");
+}
+
 function renderSprintHealthCards(cards) {
   if (!cards || cards.length === 0) {
     return "";
@@ -421,7 +475,7 @@ function renderSprintHealthCards(cards) {
           (card) => `
             <div class="metric-card tone-${escapeHtml(card.tone || "blue")}">
               <span>${escapeHtml(card.label)}</span>
-              <strong>${escapeHtml(card.value)}</strong>
+              <strong class="metric-value" ${renderMetricAnimationAttributes(card.value)}>${escapeHtml(card.value)}</strong>
               <small>${escapeHtml(card.detail || "")}</small>
             </div>
           `
@@ -548,9 +602,13 @@ function renderBurndownChart(burndown, title, label) {
       ? padding.left + finalUsableWidth / 2
       : padding.left + finalUsableWidth;
   const finalY = padding.top + finalUsableHeight - (finalPoint.remainingStoryPoints / maxRemaining) * finalUsableHeight;
-  const finalLabelX = Math.min(width - padding.right - 88, Math.max(padding.left + 8, finalX - 132));
-  const finalLabelY = Math.max(padding.top + 16, Math.min(height - padding.bottom - 18, finalY - 18));
-  const finalLabel = `Ended: ${formatNumber(finalPoint.remainingStoryPoints)} pts`;
+  const remainingAtEnd = Number(finalPoint.remainingStoryPoints || 0);
+  const sprintCleared = remainingAtEnd <= 0;
+  const markerX = Math.min(width - padding.right - 14, Math.max(padding.left + 14, finalX));
+  const markerY = Math.max(padding.top + 14, Math.min(height - padding.bottom - 14, finalY));
+  const outcomeLabel = sprintCleared
+    ? "Sprint ended at zero remaining points"
+    : `Sprint ended with ${formatNumber(remainingAtEnd)} remaining points`;
   const gradientId = `burnLine-${toDomId(`${chartLabel}-${chartTitle}-${accessibleTitle}`)}`;
 
   return `
@@ -572,6 +630,7 @@ function renderBurndownChart(burndown, title, label) {
         <path class="ideal-line" d="${idealPath}" pathLength="1" />
         <path class="burn-line" d="${remainingPath}" pathLength="1" stroke="url(#${escapeHtml(gradientId)})" />
         ${burndown.series
+          .slice(0, -1)
           .map((point, index) => {
             const usableWidth = width - padding.left - padding.right;
             const usableHeight = height - padding.top - padding.bottom;
@@ -585,9 +644,14 @@ function renderBurndownChart(burndown, title, label) {
           })
           .join("")}
         <circle class="burn-dot final" cx="${finalX.toFixed(1)}" cy="${finalY.toFixed(1)}" r="6" />
-        <g class="burn-end-label" transform="translate(${finalLabelX.toFixed(1)} ${finalLabelY.toFixed(1)})">
-          <rect width="116" height="30" rx="15" />
-          <text x="58" y="20">${escapeHtml(finalLabel)}</text>
+        <g class="burn-outcome-marker ${sprintCleared ? "is-complete" : "is-improve"}" transform="translate(${markerX.toFixed(1)} ${markerY.toFixed(1)})">
+          <title>${escapeHtml(outcomeLabel)}</title>
+          <circle r="12" />
+          ${
+            sprintCleared
+              ? `<path d="M-5 .5 L-1.4 4.2 L6 -5" />`
+              : `<path d="M0 -6 L0 2" /><circle class="marker-dot" cy="6" r="1.4" />`
+          }
         </g>
       </svg>
     </div>
@@ -766,16 +830,15 @@ function renderStoryChips(stories, emptyText = "", options = {}) {
     return emptyText ? `<div class="empty-state">${escapeHtml(emptyText)}</div>` : "";
   }
 
-  const label = options.label || "User Stories";
   const preview = Boolean(options.preview);
   const visibleStories = preview ? stories.slice(0, options.previewLimit || 4) : [];
   const hiddenCount = Math.max(stories.length - visibleStories.length, 0);
   const pointSummary = totalStoryPoints(stories);
-  const itemLabel = stories.length === 1 ? "selected item" : "selected items";
+  const storyLabel = stories.length === 1 ? "User Story" : "User Stories";
 
   return `
     <div class="story-summary-pill">
-      <strong><span>${escapeHtml(label)}:</span> ${escapeHtml(stories.length)} ${escapeHtml(itemLabel)} / ${escapeHtml(formatNumber(pointSummary))} pts</strong>
+      <strong>${escapeHtml(stories.length)} ${escapeHtml(storyLabel)} / ${escapeHtml(formatNumber(pointSummary))} pts</strong>
     </div>
     ${
       preview
@@ -901,12 +964,9 @@ async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "" }) {
   };
 }
 
-function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
+function renderAdoReviewBuilderContent({ draft, error = null, inline = false } = {}) {
   if (!draft) {
-    return renderPage({
-      title: "SprintGen - Sprint Review Builder",
-      bodyClass: "ado-page",
-      content: `
+    return `
         <section class="result-card error-card">
           <div class="eyebrow">Sprint Review Builder</div>
           <h1>Load a team and sprint first.</h1>
@@ -915,45 +975,30 @@ function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
             <a class="primary-button" href="/ado-admin">Back to SprintGen</a>
           </div>
         </section>
-      `
-    });
+      `;
   }
 
   const result = draft.result;
   const metrics = result.metrics || {};
   const totals = metrics.totals || {};
   const nextLabel = draft.nextIteration ? draft.nextIteration.name : "Next sprint";
-  const warningHtml = [draft.nextWorkItems.warning, ...(result.warnings || [])]
-    .filter(Boolean)
+  const warningHtml = filterContributorWarnings([draft.nextWorkItems.warning, ...(result.warnings || [])], metrics.contributors)
     .map((warning) => `<li>${escapeHtml(warning)}</li>`)
     .join("");
 
-  return renderPage({
-    title: "SprintGen - Build Sprint Review",
-    bodyClass: "ado-page builder-page",
-    content: `
+  return `
       <section class="ado-admin-header builder-header">
         <div>
           <div class="eyebrow">Sprint Review Builder</div>
           <h1>Curate the report before SprintGen packages it.</h1>
           <p class="lede">ADO is supplying the metrics and story wording. You add the human context: what mattered, why it mattered, and what comes next.</p>
         </div>
-        <a class="secondary-button" href="/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}">Back to selections</a>
+        ${inline ? "" : `<a class="secondary-button" href="/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}">Back to selections</a>`}
       </section>
 
       ${warningHtml ? `<div class="alert alert-warn builder-warning"><strong>Review note:</strong><ul>${warningHtml}</ul></div>` : ""}
 
       <section class="builder-facts-grid">
-        <div class="builder-fact-card">
-          <span>Team</span>
-          <strong>${escapeHtml(result.team)}</strong>
-          <small>${escapeHtml(result.iteration.name)} &middot; ${escapeHtml(formatDateOnly(result.iteration.startDate))} to ${escapeHtml(formatDateOnly(result.iteration.finishDate))}</small>
-        </div>
-        <div class="builder-fact-card">
-          <span>Area path</span>
-          <strong>${escapeHtml(result.areaPath || "All team areas")}</strong>
-          <small>Used to scope ADO stories, metrics, burndown, and velocity.</small>
-        </div>
         <div class="builder-fact-card">
           <span>Completed</span>
           <strong>${escapeHtml(formatNumber(totals.completedItems || 0))}</strong>
@@ -963,11 +1008,6 @@ function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
           <span>Completion rate</span>
           <strong>${escapeHtml(formatNumber(totals.completionRate || 0))}%</strong>
           <small>Delivered points divided by committed points</small>
-        </div>
-        <div class="builder-fact-card">
-          <span>${escapeHtml(nextLabel)}</span>
-          <strong>${escapeHtml(draft.nextWorkItems.count)}</strong>
-          <small>${draft.nextIteration ? `${escapeHtml(formatDateOnly(draft.nextIteration.startDate))} to ${escapeHtml(formatDateOnly(draft.nextIteration.finishDate))}` : "No next team iteration found"}</small>
         </div>
       </section>
 
@@ -1102,10 +1142,10 @@ function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
         <section class="builder-submit-panel">
           <div>
             <span>Ready</span>
-            <strong>Generate the report, PDF, and Presentation Mode from this curated review.</strong>
+            <strong>Generate the HTML report and Presentation Mode from this curated review.</strong>
             <small>The PAT remains in memory only. The generated job stores ADO facts and your approved narrative, not the PAT.</small>
           </div>
-          <button class="primary-button" type="submit">Generate ADO report</button>
+          <button class="primary-button" type="submit">Generate Report</button>
         </section>
       </form>
 
@@ -1130,7 +1170,14 @@ function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
           updateTotal();
         });
       </script>
-    `
+    `;
+}
+
+function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
+  return renderPage({
+    title: "SprintGen - Build Sprint Review",
+    bodyClass: "ado-page builder-page",
+    content: renderAdoReviewBuilderContent({ draft, error })
   });
 }
 
@@ -1233,6 +1280,22 @@ function renderAdoReportStyles() {
       margin: 0 auto;
       max-width: 1120px;
     }
+    .ado-report-brand-rail {
+      align-items: center;
+      background: rgba(255, 255, 255, .88);
+      border: 1px solid rgba(220, 231, 236, .9);
+      border-radius: 12px;
+      display: flex;
+      min-height: 36px;
+      padding: 7px 14px;
+      margin-bottom: 12px;
+    }
+    .ado-report-brand-rail .brand-rail-logo {
+      display: block;
+      height: auto;
+      max-height: 22px;
+      width: min(178px, 48vw);
+    }
     .ado-report-hero {
       background:
         linear-gradient(135deg, rgba(0, 118, 192, .96), rgba(14, 191, 202, .9) 52%, rgba(255, 95, 145, .88)),
@@ -1262,7 +1325,7 @@ function renderAdoReportStyles() {
     .update-card-heading span,
     .business-value-box span,
     .story-evidence > span,
-    .ado-report-contributors span,
+    .ado-report-contributors > span,
     .next-copy-panel > span {
       display: block;
       font-size: .72rem;
@@ -1310,11 +1373,21 @@ function renderAdoReportStyles() {
       margin-top: 14px;
       padding: 16px;
     }
-    .ado-report-contributors p {
-      font-size: .98rem;
-      line-height: 1.45;
-      margin: 0;
-      max-width: none;
+    .ado-report-contributor-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ado-report-contributor-list span {
+      background: rgba(255, 255, 255, .18);
+      border: 1px solid rgba(255, 255, 255, .34);
+      border-radius: 999px;
+      color: #ffffff;
+      display: inline-flex;
+      font-size: .78rem;
+      font-weight: 800;
+      line-height: 1;
+      padding: 8px 10px;
     }
     .ado-report-section {
       background: rgba(255, 255, 255, .88);
@@ -1356,6 +1429,7 @@ function renderAdoReportStyles() {
     .metric-card strong {
       display: block;
       font-size: 2.45rem;
+      font-variant-numeric: tabular-nums;
       letter-spacing: -.04em;
       line-height: .95;
     }
@@ -1420,17 +1494,35 @@ function renderAdoReportStyles() {
       stroke: #ffd166;
       stroke-width: 4;
     }
-    .burn-end-label rect {
-      fill: #10212c;
-      filter: drop-shadow(0 8px 16px rgba(16, 33, 44, .2));
-      stroke: rgba(255, 255, 255, .72);
-      stroke-width: 1;
+    .burn-outcome-marker circle {
+      filter: drop-shadow(0 8px 14px rgba(16, 33, 44, .18));
+      stroke-width: 2;
     }
-    .burn-end-label text {
-      fill: #ffffff;
-      font-size: 12px;
-      font-weight: 850;
-      text-anchor: middle;
+    .burn-outcome-marker path {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 3;
+    }
+    .burn-outcome-marker .marker-dot {
+      stroke: none;
+    }
+    .burn-outcome-marker.is-complete circle {
+      fill: #1b8a45;
+      stroke: rgba(255, 255, 255, .92);
+    }
+    .burn-outcome-marker.is-complete path {
+      stroke: #ffffff;
+    }
+    .burn-outcome-marker.is-improve circle {
+      fill: #ffd166;
+      stroke: #10212c;
+    }
+    .burn-outcome-marker.is-improve path {
+      stroke: #10212c;
+    }
+    .burn-outcome-marker.is-improve .marker-dot {
+      fill: #10212c;
     }
     .chart-caption {
       display: flex;
@@ -1705,18 +1797,106 @@ function renderAdoReportStyles() {
   `;
 }
 
+function renderMetricCountScript() {
+  return `
+  <script>
+    (function () {
+      var values = Array.prototype.slice.call(document.querySelectorAll("[data-count-target]"));
+
+      if (!values.length) {
+        return;
+      }
+
+      var prefersReducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      function formatMetricValue(element, value) {
+        var prefix = element.getAttribute("data-count-prefix") || "";
+        var suffix = element.getAttribute("data-count-suffix") || "";
+        var decimals = Number(element.getAttribute("data-count-decimals") || 0);
+        var safeDecimals = Number.isFinite(decimals) ? Math.max(0, Math.min(2, decimals)) : 0;
+        var formatted = Number(value).toLocaleString("en-US", {
+          minimumFractionDigits: safeDecimals,
+          maximumFractionDigits: safeDecimals
+        });
+
+        return prefix + formatted + suffix;
+      }
+
+      function setFinalValue(element) {
+        var target = Number(element.getAttribute("data-count-target") || 0);
+        element.textContent = formatMetricValue(element, Number.isFinite(target) ? target : 0);
+      }
+
+      function animateValue(element) {
+        if (element.dataset.countAnimated === "true") {
+          return;
+        }
+
+        element.dataset.countAnimated = "true";
+
+        var target = Number(element.getAttribute("data-count-target") || 0);
+
+        if (!Number.isFinite(target) || prefersReducedMotion) {
+          setFinalValue(element);
+          return;
+        }
+
+        var duration = 1150;
+        var startedAt = 0;
+
+        element.textContent = formatMetricValue(element, 0);
+
+        function frame(now) {
+          if (!startedAt) {
+            startedAt = now;
+          }
+
+          var progress = Math.min((now - startedAt) / duration, 1);
+          var eased = 1 - Math.pow(1 - progress, 3);
+          element.textContent = formatMetricValue(element, target * eased);
+
+          if (progress < 1) {
+            window.requestAnimationFrame(frame);
+          } else {
+            setFinalValue(element);
+          }
+        }
+
+        window.requestAnimationFrame(frame);
+      }
+
+      if (!("IntersectionObserver" in window)) {
+        values.forEach(animateValue);
+        return;
+      }
+
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            animateValue(entry.target);
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: .35 });
+
+      values.forEach(function (element) {
+        observer.observe(element);
+      });
+    }());
+  </script>`;
+}
+
 function renderAdoReportContributors(contributors) {
   if (!contributors || contributors.length === 0) {
     return "";
   }
 
-  const visible = contributors.slice(0, 18);
-  const hiddenCount = Math.max(contributors.length - visible.length, 0);
-
   return `
     <div class="ado-report-contributors">
       <span>Sprint contributors</span>
-      <p>${escapeHtml(visible.join(", "))}${hiddenCount > 0 ? ` and ${escapeHtml(hiddenCount)} more` : ""}</p>
+      <div class="ado-report-contributor-list">
+        ${contributors.map((name) => `<span>${escapeHtml(name)}</span>`).join("")}
+      </div>
     </div>
   `;
 }
@@ -1739,6 +1919,8 @@ function renderAdoReportHtml(report) {
 </head>
 <body class="ado-report-document">
   <main class="ado-report-shell">
+    ${renderBrandRail({ className: "brand-rail ado-report-brand-rail" })}
+
     <header class="ado-report-hero">
       <span>SprintGen ADO report</span>
       <h1>${escapeHtml(result.iteration.name)}</h1>
@@ -1794,46 +1976,34 @@ function renderAdoReportHtml(report) {
       Generated by SprintGen on ${escapeHtml(generatedAt)}. ADO supplied facts and story wording. Scrum master narrative was reviewed on screen before generation.
     </footer>
   </main>
+  ${renderMetricCountScript()}
 </body>
 </html>`;
 }
 
 function renderAdoReportResultPage({ jobId, report }) {
   const result = report.result || report;
-  const warnings = result.warnings || [];
-  const pdf = report.pdf || { available: true };
-  const pdfWarningHtml =
-    pdf.available === false
-      ? `<div class="alert alert-warn"><strong>PDF needs a retry:</strong> ${escapeHtml(
-          pdf.error || "PDF export did not complete, but the HTML report and Presentation Mode are ready."
-        )}</div>`
-      : "";
+  const metrics = result.metrics || {};
+  const warnings = filterContributorWarnings(result.warnings || [], metrics.contributors);
   const warningHtml =
     warnings.length > 0
       ? `<div class="alert alert-warn"><strong>Review note:</strong><ul>${warnings
           .map((warning) => `<li>${escapeHtml(warning)}</li>`)
           .join("")}</ul></div>`
-      : `<div class="alert alert-good"><strong>ADO report is ready.</strong> Metrics, selected stories, HTML, and Presentation Mode were generated from your curated sprint review.</div>`;
-  const pdfAction =
-    pdf.available === false
-      ? `<span class="secondary-button disabled-button" aria-disabled="true">PDF unavailable locally</span>`
-      : `<a class="secondary-button strong" href="/download/${encodeURIComponent(jobId)}">Download PDF</a>`;
-
+      : "";
   return renderPage({
-    title: "SprintGen - ADO Report Ready",
+    title: "SprintGen - Review Ready",
     bodyClass: "result-page ado-page",
     content: `
       <section class="result-card ado-report-ready-card">
-        <div class="success-orb">win</div>
-        <div class="eyebrow">ADO report ready</div>
+        <div class="success-orb">ready</div>
+        <div class="eyebrow">Review Ready</div>
         <h1>${escapeHtml(result.iteration.name)} is packaged for stakeholders.</h1>
-        <p class="lede">SprintGen combined ADO metrics, ADO story wording, and your approved sprint review narrative into a report and screen-share presentation.</p>
         ${warningHtml}
-        ${pdfWarningHtml}
         <div class="result-actions">
-          <a class="primary-button" href="/preview/${encodeURIComponent(jobId)}" target="_blank" rel="noreferrer">Open HTML report</a>
-          ${pdfAction}
-          <a class="ghost-button" href="/ado-admin">Build another ADO report</a>
+          <a class="primary-button" href="/download-html/${encodeURIComponent(jobId)}">Download HTML</a>
+          <a class="secondary-button strong" href="/preview/${encodeURIComponent(jobId)}" target="_blank" rel="noreferrer">Open HTML report</a>
+          <a class="ghost-button" href="/ado-admin">Build another review</a>
         </div>
         <div class="present-launch">
           <span>Presentation Mode</span>
@@ -1844,11 +2014,6 @@ function renderAdoReportResultPage({ jobId, report }) {
             <a class="secondary-button" href="/ado-present/${encodeURIComponent(jobId)}?vibe=dark" target="_blank" rel="noreferrer">Dark</a>
             <a class="secondary-button strong" href="/ado-present/${encodeURIComponent(jobId)}?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
           </div>
-        </div>
-        <div class="mini-summary">
-          <div><span>Team</span><strong>${escapeHtml(result.team)}</strong></div>
-          <div><span>Sprint</span><strong>${escapeHtml(result.iteration.name)}</strong></div>
-          <div><span>Delivery updates</span><strong>${escapeHtml((report.narrative.updates || []).length)}</strong></div>
         </div>
       </section>
     `
@@ -2209,7 +2374,7 @@ function getSprintLabel(iterationPath) {
 
 function renderAdoAdminConnectPage({ error = null } = {}) {
   const errorHtml = error
-    ? `<div class="alert alert-error"><strong>Authorize:</strong> ${escapeHtml(error.message)}${
+    ? `<div class="alert alert-error"><strong>Connection:</strong> ${escapeHtml(error.message)}${
         error.detail ? `<small>${escapeHtml(error.detail)}</small>` : ""
       }</div>`
     : "";
@@ -2222,7 +2387,7 @@ function renderAdoAdminConnectPage({ error = null } = {}) {
         <div class="ado-copy">
           <div class="eyebrow">SprintGen</div>
           <h1>Start your sprint review</h1>
-          <p class="lede">Authorize SprintGen to read Azure DevOps, then choose the sprint you want to turn into a polished review.</p>
+          <p class="lede">Use a temporary Azure DevOps PAT, then choose the sprint you want to turn into a polished review.</p>
           <div class="ado-northstar">
             <strong>Secure session</strong>
             <p>Your PAT is kept in memory for this browser session only.</p>
@@ -2231,7 +2396,7 @@ function renderAdoAdminConnectPage({ error = null } = {}) {
 
         <form class="ado-form-card" action="/ado-admin/connect" method="post" autocomplete="off">
           <div class="form-heading">
-            <span>Authorize</span>
+            <span>Connect</span>
             <strong>Unlock sprint data</strong>
           </div>
           ${errorHtml}
@@ -2328,9 +2493,8 @@ function renderAdoAdminPage({
             <div class="flow-step build-step">
               <span class="flow-step-number">3</span>
               <div>
-                <strong>Build review</strong>
-                <p>SprintGen will pull metrics, stories, and next-sprint context from ADO.</p>
-                <button class="primary-button" type="submit" data-build-button${selectedTeam ? "" : " disabled"}>Build Review</button>
+                <strong>Review builder</strong>
+                <p data-build-copy>Choose sprint and work area. SprintGen will load the builder below.</p>
               </div>
             </div>
           </div>
@@ -2339,6 +2503,8 @@ function renderAdoAdminPage({
             <div class="alert alert-warn"><strong>JavaScript required:</strong> Enable JavaScript to load area and sprint choices without leaving this page.</div>
           </noscript>
         </form>
+
+        <section class="inline-builder-shell" data-inline-builder aria-live="polite"></section>
       </section>
 
       <script>
@@ -2352,7 +2518,10 @@ function renderAdoAdminPage({
           var sprintSelect = form.querySelector("[data-sprint-select]");
           var details = form.querySelector("[data-scope-details]");
           var status = form.querySelector("[data-scope-status]");
-          var buildButton = form.querySelector("[data-build-button]");
+          var buildCopy = form.querySelector("[data-build-copy]");
+          var builderMount = document.querySelector("[data-inline-builder]");
+          var lastBuilderKey = "";
+          form.classList.add("is-inline-builder-enabled");
 
           function setStatus(message, tone) {
             status.textContent = message;
@@ -2385,7 +2554,105 @@ function renderAdoAdminPage({
 
           function updateBuildState() {
             var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
-            buildButton.disabled = !ready;
+            if (buildCopy) {
+              buildCopy.textContent = ready
+                ? "SprintGen is loading the review builder below."
+                : "Choose sprint and work area. SprintGen will load the builder below.";
+            }
+          }
+
+          function setBuilderMessage(message, tone) {
+            if (!builderMount) return;
+            builderMount.innerHTML = "";
+            var box = document.createElement("div");
+            box.className = "inline-builder-message" + (tone ? " " + tone : "");
+            box.textContent = message;
+            builderMount.appendChild(box);
+          }
+
+          function clearBuilder() {
+            lastBuilderKey = "";
+            if (builderMount) {
+              builderMount.innerHTML = "";
+            }
+          }
+
+          function initStoryPickers(root) {
+            root.querySelectorAll("[data-story-picker]").forEach(function (picker) {
+              var total = picker.querySelector("[data-picker-total]");
+              var inputs = Array.prototype.slice.call(picker.querySelectorAll("input[type='checkbox']"));
+
+              function updateTotal() {
+                var selected = inputs.filter(function (input) { return input.checked; });
+                var points = selected.reduce(function (sum, input) {
+                  var value = Number(input.getAttribute("data-points") || 0);
+                  return sum + (Number.isFinite(value) ? value : 0);
+                }, 0);
+
+                if (total) {
+                  total.textContent = selected.length + " selected / " + points.toLocaleString("en-US", { maximumFractionDigits: 1 }) + " pts";
+                }
+              }
+
+              picker.addEventListener("change", updateTotal);
+              updateTotal();
+            });
+          }
+
+          async function loadInlineBuilder(force) {
+            if (!builderMount) return;
+
+            var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
+            if (!ready) {
+              clearBuilder();
+              return;
+            }
+
+            var key = [teamSelect.value, areaSelect.value, sprintSelect.value].join("||");
+            if (!force && key === lastBuilderKey && builderMount.innerHTML.trim()) {
+              return;
+            }
+
+            lastBuilderKey = key;
+            setStatus("Building review...", "good");
+            setBuilderMessage("Loading stories, metrics, and next-sprint context...");
+
+            var body = new URLSearchParams();
+            body.set("team", teamSelect.value);
+            body.set("areaPath", areaSelect.value);
+            body.set("sprint", sprintSelect.value);
+            body.set("inline", "1");
+
+            try {
+              var response = await fetch("/ado-admin/review?partial=1", {
+                method: "POST",
+                headers: {
+                  Accept: "text/html",
+                  "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+                },
+                body: body.toString()
+              });
+              var html = await response.text();
+
+              if (key !== [teamSelect.value, areaSelect.value, sprintSelect.value].join("||")) {
+                return;
+              }
+
+              builderMount.innerHTML = html;
+              initStoryPickers(builderMount);
+
+              if (!response.ok) {
+                lastBuilderKey = "";
+                setStatus("Could not build review.", "error");
+                return;
+              }
+
+              setStatus("Builder ready below.", "good");
+            } catch (error) {
+              lastBuilderKey = "";
+              setStatus(error.message, "error");
+              setBuilderMessage(error.message, "error");
+            }
           }
 
           function resetScope(message) {
@@ -2396,6 +2663,7 @@ function renderAdoAdminPage({
             details.classList.remove("is-open");
             details.setAttribute("aria-hidden", "true");
             setStatus(message || "Team selection unlocks sprint details.");
+            clearBuilder();
             updateBuildState();
           }
 
@@ -2461,8 +2729,18 @@ function renderAdoAdminPage({
           teamSelect.addEventListener("change", function () {
             loadScope(teamSelect.value);
           });
-          areaSelect.addEventListener("change", updateBuildState);
-          sprintSelect.addEventListener("change", updateBuildState);
+          areaSelect.addEventListener("change", function () {
+            updateBuildState();
+            loadInlineBuilder();
+          });
+          sprintSelect.addEventListener("change", function () {
+            updateBuildState();
+            loadInlineBuilder();
+          });
+          form.addEventListener("submit", function (event) {
+            event.preventDefault();
+            loadInlineBuilder(true);
+          });
 
           if (initialScope && teamSelect.value === initialScope.team) {
             applyScope(initialScope);
@@ -2514,22 +2792,20 @@ function renderAdoPresentationUpdateSlides(updates) {
           <div class="present-card wide narrative-card">
             <span class="present-kicker">${update.priority ? "#1 priority" : `Delivery Update ${index + 1}`}</span>
             <h2>${escapeHtml(update.title || `Delivery update ${index + 1}`)}</h2>
-            <div class="present-narrative-grid${update.stories && update.stories.length > 0 ? "" : " single"}">
+            <div class="present-narrative-grid single delivery-update-layout">
               <div class="present-copy-block">
                 ${renderBulletList(update.bullets, "No bullet points were added for this update.")}
+                ${
+                  update.stories && update.stories.length > 0
+                    ? `<div class="delivery-story-pill">${renderStoryChips(update.stories)}</div>`
+                    : ""
+                }
                 ${
                   update.businessValue
                     ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(update.businessValue)}</p></div>`
                     : ""
                 }
               </div>
-              ${
-                update.stories && update.stories.length > 0
-                  ? `<div class="present-story-block">
-                      ${renderStoryChips(update.stories)}
-                    </div>`
-                  : ""
-              }
             </div>
           </div>
         </section>
@@ -2557,13 +2833,12 @@ function renderPresentationContributors(contributors) {
     return "";
   }
 
-  const visible = contributors.slice(0, 12);
-  const hiddenCount = Math.max(contributors.length - visible.length, 0);
-
   return `
     <div class="present-contributors">
       <span>Sprint contributors</span>
-      <p>${escapeHtml(visible.join(", "))}${hiddenCount > 0 ? ` and ${escapeHtml(hiddenCount)} more` : ""}</p>
+      <div class="present-contributor-list">
+        ${contributors.map((name) => `<span>${escapeHtml(name)}</span>`).join("")}
+      </div>
     </div>
   `;
 }
@@ -2576,6 +2851,14 @@ function renderAdoPresentationPage(report, vibeInput) {
   const vibe = normalizePresentationVibe(vibeInput);
   const completedItems = metrics.items ? metrics.items.completed : [];
   const summary = narrative && narrative.summary ? narrative.summary : defaultSummaryText(result);
+  const presentationBrandRailTop = renderBrandRail({
+    mono: true,
+    className: "presentation-brand-rail is-top"
+  });
+  const presentationBrandRailBottom = renderBrandRail({
+    mono: true,
+    className: "presentation-brand-rail is-bottom"
+  });
   const openingRemarksSlide = narrative
     ? `
       <section class="ado-present-slide">
@@ -2629,6 +2912,7 @@ function renderAdoPresentationPage(report, vibeInput) {
           <h2>Questions, feedback, and discussion.</h2>
           <p>Use this space to capture stakeholder reactions, follow-ups, risks, and anything the team should carry into the next sprint.</p>
         </div>
+        ${presentationBrandRailBottom}
       </section>
     `
     : `
@@ -2638,6 +2922,7 @@ function renderAdoPresentationPage(report, vibeInput) {
           <h2>Turn these facts into an editable sprint review.</h2>
           <p>The next layer should combine these ADO facts with web-form narrative fields for business value, demo focus, and looking ahead.</p>
         </div>
+        ${presentationBrandRailBottom}
       </section>
     `;
 
@@ -2650,12 +2935,13 @@ function renderAdoPresentationPage(report, vibeInput) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/ado-present.css?v=7">
+  <link rel="stylesheet" href="/assets/ado-present.css?v=10">
 </head>
 <body class="vibe-${escapeHtml(vibe)}">
   <div class="present-progress" aria-hidden="true"><span></span></div>
   <main class="ado-present-deck" data-deck>
     <section class="ado-present-slide opening">
+      ${presentationBrandRailTop}
       <div class="present-card">
         <span class="present-kicker">Sprint Recap</span>
         <h1>${escapeHtml(result.iteration.name)}</h1>
@@ -2696,10 +2982,10 @@ function renderAdoPresentationPage(report, vibeInput) {
     ${closingSlide}
   </main>
   <nav class="present-controls" aria-label="Presentation controls">
-    <button type="button" data-prev>Previous</button>
-    <button type="button" data-next>Next</button>
+    <button type="button" data-prev aria-label="Previous slide">&#8592;</button>
+    <button type="button" data-next aria-label="Next slide">&#8594;</button>
   </nav>
-  <script src="/assets/ado-present.js?v=7"></script>
+  <script src="/assets/ado-present.js?v=11"></script>
 </body>
 </html>`;
 }
@@ -2853,6 +3139,7 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
     previousRows: null,
     velocityInputs
   });
+  const filteredWarnings = filterContributorWarnings(warnings, metrics.contributors);
 
   return {
     config: adoConfig,
@@ -2865,7 +3152,7 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
     burndown,
     workItems,
     metrics,
-    warnings
+    warnings: filteredWarnings
   };
 }
 
@@ -3059,8 +3346,21 @@ app.get("/ado-admin/scope", async (req, res) => {
 
 async function handleAdoReviewBuilder(req, res) {
   const session = getAdoSession(req);
+  const wantsPartial = req.query.partial === "1" || req.body.inline === "1";
 
   if (!session) {
+    if (wantsPartial) {
+      res.status(401).send(
+        renderAdoReviewBuilderContent({
+          inline: true,
+          error: {
+            message: "Your temporary SprintGen session expired. Paste the PAT again to build the sprint review."
+          }
+        })
+      );
+      return;
+    }
+
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
@@ -3083,14 +3383,19 @@ async function handleAdoReviewBuilder(req, res) {
       areaPath: selectedAreaPath
     });
 
-    res.send(renderAdoReviewBuilderPage({ draft }));
+    res.send(wantsPartial ? renderAdoReviewBuilderContent({ draft, inline: true }) : renderAdoReviewBuilderPage({ draft }));
   } catch (error) {
     const formattedError = formatAdoError(error);
 
     res.status(formattedError.status).send(
-      renderAdoReviewBuilderPage({
-        error: formattedError
-      })
+      wantsPartial
+        ? renderAdoReviewBuilderContent({
+            inline: true,
+            error: formattedError
+          })
+        : renderAdoReviewBuilderPage({
+            error: formattedError
+          })
     );
   }
 }
@@ -3331,6 +3636,38 @@ app.get("/present/:id", (req, res) => {
 
     const result = renderPresentationHtml(paths.uploadPath, req.query.vibe);
     res.send(result.html);
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.get("/download-html/:id", (req, res) => {
+  try {
+    const paths = getJobPaths(req.params.id);
+    let html = "";
+    let downloadName = "sprint-review.html";
+
+    if (fs.existsSync(paths.adoDataPath)) {
+      const report = JSON.parse(fs.readFileSync(paths.adoDataPath, "utf8"));
+      const result = report.result || report;
+
+      html = renderAdoReportHtml(report);
+      downloadName = getHtmlDownloadName(result.iteration && result.iteration.name);
+    } else if (fs.existsSync(paths.htmlPath)) {
+      html = fs.readFileSync(paths.htmlPath, "utf8");
+
+      if (fs.existsSync(paths.metaPath)) {
+        const metadata = JSON.parse(fs.readFileSync(paths.metaPath, "utf8"));
+        downloadName = getHtmlDownloadName(metadata.basics && metadata.basics.SprintName);
+      }
+    } else {
+      res.status(404).send(renderErrorPage("That HTML report is no longer available. Please generate the report again."));
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${downloadName}"`);
+    res.send(html);
   } catch (error) {
     res.status(404).send(renderErrorPage(error));
   }

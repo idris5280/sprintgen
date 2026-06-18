@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/present.css?v=1">
+  <link rel="stylesheet" href="/assets/present.css?v=3">
 </head>
 <body class="present vibe-{{vibe}}">
   <div class="ambient-field" aria-hidden="true"></div>
@@ -25,6 +25,7 @@
 
   <main class="deck" tabindex="-1">
     <section class="slide hero-slide is-active" id="slide-hero" data-slide-title="{{basics.SprintName}}">
+      {{{presentationBrandRailTop}}}
       <div class="slide-shell hero-shell">
         <p class="slide-label">{{basics.TeamName}}</p>
         <h1>{{basics.SprintName}}</h1>
@@ -145,12 +146,13 @@
         <h2>Ready for the next sprint story.</h2>
         <p class="closing-copy">{{basics.FooterText}}</p>
       </div>
+      {{{presentationBrandRailBottom}}}
     </section>
   </main>
 
   <nav class="present-controls" aria-label="Slide navigation">
-    <button type="button" data-present-prev>Previous</button>
-    <button type="button" data-present-next>Next</button>
+    <button type="button" data-present-prev aria-label="Previous slide">&#8592;</button>
+    <button type="button" data-present-next aria-label="Next slide">&#8594;</button>
   </nav>
 
   <script src="/assets/present.js?v=1"></script>

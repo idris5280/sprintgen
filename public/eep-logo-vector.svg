@@ -1,877 +1,219 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Team 9 - Sprint 36 Progress Update</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --blue: #0076C0;
-      --blue-dk: #005287;
-      --cyan: #0EBFCA;
-      --tint: #F4F8FA;
-      --bg: #F5F7F9;
-      --paper: #FFFFFF;
-      --txt: #2A2C2F;
-      --txt2: #788187;
-      --bdr: #D5DCE1;
-      --grn: #1B6E2A;
-      --grn-bg: #EDF7EE;
-      --org: #C45000;
-      --org-bg: #FFF4EB;
-      --red: #B42318;
-      --red-bg: #FEF3F2;
-      --gray: #4D5961;
-      --gray-bg: #F1F4F6;
-      --grad: linear-gradient(90deg, #7B0CEA -16.94%, #128ADF 52.91%, #0EBFCA 123.39%);
-    }
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--txt);
-      font-family: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    .brand-rail {
-      align-items: center;
-      background: var(--paper);
-      border-bottom: 1px solid var(--bdr);
-      display: flex;
-      min-height: 34px;
-      padding: 7px 32px;
-    }
-
-    .brand-rail-logo {
-      display: block;
-      height: auto;
-      max-height: 22px;
-      width: min(178px, 48vw);
-    }
-
-    .header-bar {
-      align-items: center;
-      background: var(--paper);
-      border-bottom: 1px solid var(--bdr);
-      display: flex;
-      gap: 12px;
-      min-height: 64px;
-      padding: 12px 32px;
-    }
-
-    .brand-mark {
-      display: grid;
-      gap: 3px;
-      width: 44px;
-    }
-
-    .brand-mark span {
-      background: var(--blue);
-      border-radius: 999px;
-      display: block;
-      height: 5px;
-    }
-
-    .brand-mark span:nth-child(2) {
-      background: #0096D6;
-      margin-left: 8px;
-      width: 34px;
-    }
-
-    .brand-mark span:nth-child(3) {
-      background: var(--blue-dk);
-      width: 24px;
-    }
-
-    .header-logo {
-      color: var(--blue-dk);
-      font-size: .82rem;
-      font-weight: 800;
-      letter-spacing: -.01em;
-      line-height: 1.15;
-    }
-
-    .header-logo span {
-      color: var(--txt2);
-      display: block;
-      font-size: .66rem;
-      font-weight: 600;
-      letter-spacing: .04em;
-      text-transform: uppercase;
-    }
-
-    .hero-wrap {
-      padding: 28px 4% 0;
-    }
-
-    .hero {
-      background: var(--grad);
-      border-radius: 40px;
-      box-shadow: 0 0 0 10px var(--bg);
-      color: #FFFFFF;
-      padding: 44px 40px;
-      text-align: center;
-    }
-
-    .hero-label {
-      font-size: .6rem;
-      font-weight: 700;
-      letter-spacing: .15em;
-      margin-bottom: 8px;
-      opacity: .62;
-      text-transform: uppercase;
-    }
-
-    .hero h1 {
-      font-size: 2rem;
-      font-weight: 800;
-      letter-spacing: -.02em;
-      line-height: 1.2;
-    }
-
-    .hero .sub {
-      font-size: .88rem;
-      font-weight: 500;
-      margin-top: 6px;
-      opacity: .75;
-    }
-
-    .hero .rollout {
-      background: rgba(255, 255, 255, .16);
-      border-radius: 20px;
-      display: inline-block;
-      font-size: .72rem;
-      font-weight: 800;
-      letter-spacing: .04em;
-      margin-top: 14px;
-      padding: 6px 18px;
-      text-transform: uppercase;
-    }
-
-    .wrap {
-      margin: 0 auto;
-      max-width: 820px;
-      padding: 0 24px 48px;
-    }
-
-    .sec {
-      padding-top: 40px;
-    }
-
-    .sec-label {
-      color: var(--blue);
-      font-size: .58rem;
-      font-weight: 800;
-      letter-spacing: .13em;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-    }
-
-    .sec-title {
-      font-size: 1.2rem;
-      font-weight: 800;
-      line-height: 1.3;
-      margin-bottom: 16px;
-    }
-
-    .summary {
-      background: var(--grad);
-      border-radius: 20px;
-      color: #FFFFFF;
-      margin-top: 36px;
-      padding: 28px 28px 24px;
-    }
-
-    .summary-label {
-      font-size: .56rem;
-      font-weight: 800;
-      letter-spacing: .14em;
-      margin-bottom: 14px;
-      opacity: .56;
-      text-align: center;
-      text-transform: uppercase;
-    }
-
-    .summary-grid {
-      display: grid;
-      gap: 10px 22px;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .summary-item {
-      font-size: .82rem;
-      font-weight: 600;
-      line-height: 1.5;
-      padding: 4px 0 4px 28px;
-      position: relative;
-    }
-
-    .summary-item::before {
-      content: attr(data-icon);
-      font-size: .85rem;
-      left: 0;
-      position: absolute;
-      top: 3px;
-    }
-
-    .cards {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(3, 1fr);
-      margin-bottom: 16px;
-    }
-
-    .card {
-      background: var(--paper);
-      border: 1px solid var(--bdr);
-      border-radius: 12px;
-      padding: 20px;
-    }
-
-    .card:hover {
-      box-shadow: 0 2px 12px rgba(0, 0, 0, .06);
-    }
-
-    .card-kicker {
-      align-items: center;
-      color: var(--blue);
-      display: flex;
-      font-size: .72rem;
-      font-weight: 800;
-      gap: 8px;
-      margin-bottom: 7px;
-    }
-
-    .card-icon {
-      align-items: center;
-      background: var(--tint);
-      border: 1px solid #E2E8EE;
-      border-radius: 999px;
-      display: inline-flex;
-      height: 26px;
-      justify-content: center;
-      min-width: 26px;
-      padding: 0 7px;
-    }
-
-    .card h4 {
-      font-size: .86rem;
-      font-weight: 800;
-      line-height: 1.3;
-      margin-bottom: 6px;
-    }
-
-    .card p {
-      color: var(--txt2);
-      font-size: .78rem;
-      line-height: 1.55;
-    }
-
-    .metrics {
-      display: grid;
-      gap: 12px;
-      grid-template-columns: repeat(4, 1fr);
-    }
-
-    .metric {
-      background: var(--paper);
-      border: 1px solid var(--bdr);
-      border-radius: 12px;
-      padding: 18px 14px;
-      text-align: center;
-    }
-
-    .metric-value {
-      color: var(--blue);
-      font-size: 1.6rem;
-      font-weight: 800;
-      line-height: 1;
-    }
-
-    .metric-value.green { color: var(--grn); }
-    .metric-value.orange { color: var(--org); }
-    .metric-value.red { color: var(--red); }
-    .metric-value.gray { color: var(--gray); }
-
-    .metric-label {
-      color: var(--txt2);
-      font-size: .68rem;
-      font-weight: 700;
-      line-height: 1.3;
-      margin-top: 5px;
-    }
-
-    .bl {
-      list-style: none;
-      margin-bottom: 16px;
-    }
-
-    .bl li {
-      color: var(--txt2);
-      font-size: .88rem;
-      line-height: 1.6;
-      padding: 6px 0 6px 20px;
-      position: relative;
-    }
-
-    .bl li::before {
-      background: var(--blue);
-      border-radius: 50%;
-      content: "";
-      height: 6px;
-      left: 0;
-      position: absolute;
-      top: 14px;
-      width: 6px;
-    }
-
-    .impact {
-      align-items: center;
-      background: var(--grn-bg);
-      border-radius: 10px;
-      color: var(--grn);
-      display: flex;
-      gap: 12px;
-      padding: 14px 18px;
-    }
-
-    .impact .t {
-      font-size: .56rem;
-      font-weight: 800;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .impact .m {
-      font-size: .84rem;
-      font-weight: 700;
-      line-height: 1.45;
-    }
-
-    .demo {
-      background: var(--paper);
-      border: 2px dashed var(--bdr);
-      border-radius: 10px;
-      color: var(--txt2);
-      font-size: .84rem;
-      line-height: 1.55;
-      margin-top: 4px;
-      padding: 28px 18px;
-      text-align: center;
-    }
-
-    .demo strong {
-      color: var(--blue);
-      display: block;
-      font-size: .62rem;
-      font-weight: 800;
-      letter-spacing: .1em;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-    }
-
-    .next {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .next-row {
-      align-items: center;
-      background: var(--paper);
-      border: 1px solid var(--bdr);
-      border-left: 3px solid var(--blue);
-      border-radius: 10px;
-      display: flex;
-      gap: 10px;
-      padding: 12px 16px;
-    }
-
-    .next-badge {
-      border-radius: 4px;
-      font-size: .54rem;
-      font-weight: 800;
-      letter-spacing: .05em;
-      min-width: 58px;
-      padding: 4px 8px;
-      text-align: center;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .badge-qa {
-      background: #E8F5E9;
-      color: #2E7D32;
-    }
-
-    .badge-active {
-      background: #E3F2FD;
-      color: #1565C0;
-    }
-
-    .badge-planned {
-      background: var(--tint);
-      color: var(--txt2);
-    }
-
-    .badge-done {
-      background: var(--grn-bg);
-      color: var(--grn);
-    }
-
-    .next-text {
-      color: var(--txt2);
-      font-size: .84rem;
-      line-height: 1.4;
-    }
-
-    .next-text strong {
-      color: var(--txt);
-    }
-
-    .footer {
-      background: #F1F4F6;
-      color: var(--txt2);
-      font-size: .7rem;
-      line-height: 1.5;
-      padding: 28px 32px;
-      text-align: center;
-    }
-
-    .footer-copy {
-      color: var(--txt2);
-      font-size: .6rem;
-      margin-top: 6px;
-    }
-
-    @media (max-width: 720px) {
-      .brand-rail {
-        padding: 7px 20px;
-      }
-
-      .header-bar {
-        padding: 12px 20px;
-      }
-
-      .hero-wrap {
-        padding: 0;
-      }
-
-      .hero {
-        border-radius: 0;
-        padding: 32px 20px;
-      }
-
-      .hero h1 {
-        font-size: 1.55rem;
-      }
-
-      .summary-grid,
-      .cards,
-      .metrics {
-        grid-template-columns: 1fr;
-      }
-
-      .next-row,
-      .impact {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-    }
-
-    @page {
-      margin: .35in;
-      size: letter;
-    }
-
-    @media print {
-      body {
-        background: #FFFFFF;
-      }
-
-      .hero {
-        box-shadow: none;
-        padding: 30px;
-      }
-
-      .hero-wrap {
-        padding-top: 0;
-      }
-
-      .sec {
-        padding-top: 24px;
-      }
-
-      .summary,
-      .card,
-      .metric,
-      .impact,
-      .next-row,
-      .demo {
-        break-inside: avoid;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="brand-rail report-brand-rail" aria-hidden="true"><svg class="brand-rail-logo" aria-hidden="true" focusable="false"
+<svg
    version="1.1"
-
+   id="svg1"
    width="211.69333"
    height="54.813332"
    viewBox="0 0 211.69333 54.813332"
-
-
-
+   sodipodi:docname="eep-logo-vector.eps"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
-  >
+   xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     />
-
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1">
+    <inkscape:page
+       x="0"
+       y="0"
+       inkscape:label="1"
+       id="page1"
+       width="211.69333"
+       height="54.813332"
+       margin="0"
+       bleed="0" />
+  </sodipodi:namedview>
   <g
-
-
-    >
+     id="g1"
+     inkscape:groupmode="layer"
+     inkscape:label="1">
     <g
-      >
+       id="group-R5">
       <path
-
+         id="path2"
          d="M 337.309,29.2109 H 316.078 L 312.477,13.125 h 23.914 L 333.617,1.08594 h -36.695 l 14.832,66.06246 h 35.461 l -2.777,-12.0703 h -22.555 l -3.235,-14.0156 h 21.415 l -2.754,-11.8516"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path3"
          d="m 393.375,1.08594 5.066,27.24216 c 1.348,7.1602 3.164,16.2696 5.356,25.7813 h -0.266 C 399.789,45.5859 395.594,36.4727 391.922,29.2109 L 378.227,2.15625 h -9.942 l -0.738,26.76955 c -0.16,7.2461 -0.117,16.3555 -0.012,25.1836 h -0.176 c -2.14,-8.7266 -4.445,-18.7188 -6.328,-25.7813 L 353.656,1.08594 h -11.734 l 18.473,66.06246 h 17.152 l 0.547,-25.1953 c 0.039,-6.1718 0.269,-13.625 -0.024,-20.9687 h 0.356 c 2.691,7.3437 6.289,15.0781 9.176,21.0664 l 12.433,25.0976 h 17.332 L 405.805,1.08594 h -12.43"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path4"
          d="m 436.488,36.3672 c 1.407,-0.3047 2.727,-0.4883 4.942,-0.4883 7.648,0 12.992,5.3906 13.34,12.0586 0.332,6.2734 -3.641,8.332 -8.622,8.332 -2.39,0 -4.187,-0.207 -5.261,-0.3906 z m -5.84,29.5117 c 3.887,1.0742 9.864,1.6602 15.649,1.6602 5.426,0 11.504,-0.9844 15.68,-4.4141 3.925,-2.9297 6.078,-7.6367 5.742,-14.0156 -0.43,-8.2305 -4.227,-14.6055 -9.063,-18.5235 -5.097,-4.2187 -12.226,-6.1718 -19.511,-6.1718 -2.129,0 -3.895,0.2929 -5.215,0.3906 L 428.598,1.08594 h -12.539 l 14.589,64.79296"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path5"
          d="M 478.188,67.1484 H 490.98 L 478.93,13.4297 h 23.008 L 499.164,1.08594 h -35.82 l 14.844,66.06246"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path6"
          d="m 531.832,11.7578 c 10.305,0 18.176,16.0742 18.816,28.5235 0.43,8.2343 -1.812,16.1718 -11.226,16.1718 -10.766,0 -18.617,-15.8672 -19.27,-28.4179 -0.488,-9.3125 2.969,-16.2774 11.59,-16.2774 z M 529.438,0 c -15.555,0 -23.622,12.1563 -22.809,27.5508 0.625,11.8633 5.223,23.5117 12.461,31.082 5.918,5.9649 13.836,9.5899 22.539,9.5899 15.816,0 23.551,-11.7696 22.73,-27.5313 C 563.734,28.7227 559.305,16.9531 552.152,9.60938 546.336,3.51563 538.504,0 529.535,0 h -0.097"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path7"
          d="m 571.363,1.08594 6.035,26.94926 -9.679,39.1132 h 13.683 l 2.942,-16.7578 c 0.875,-5.5 1.328,-8.625 1.676,-11.9609 h 0.199 c 1.953,3.5234 4.011,7.2461 6.754,12.0586 l 9.843,16.6601 h 15.293 L 590.211,28.3281 584.168,1.08594 h -12.805"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path8"
          d="m 657.215,1.08594 5.066,27.24216 c 1.356,7.1602 3.164,16.2696 5.34,25.7813 h -0.254 c -3.73,-8.5235 -7.945,-17.6367 -11.621,-24.8985 L 642.074,2.15625 h -9.961 l -0.722,26.76955 c -0.157,7.2461 -0.118,16.3555 -0.02,25.1836 h -0.176 c -2.144,-8.7266 -4.453,-18.7188 -6.328,-25.7813 L 617.484,1.08594 h -11.738 l 18.488,66.06246 h 17.157 l 0.547,-25.1953 c 0.023,-6.1718 0.253,-13.625 -0.04,-20.9687 h 0.356 c 2.703,7.3437 6.305,15.0781 9.195,21.0664 l 12.422,25.0976 h 17.324 L 669.652,1.08594 h -12.437"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path9"
          d="M 720.301,29.2109 H 699.059 L 695.453,13.125 h 23.906 L 716.605,1.08594 H 679.898 L 694.73,67.1484 h 35.469 L 727.43,55.0781 h -22.582 l -3.211,-14.0156 h 21.418 l -2.754,-11.8516"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path10"
          d="m 726.324,1.08594 14.832,66.06246 h 15.024 l 6.582,-25.1953 c 1.968,-8.4375 3.203,-15.2929 4.246,-22.539 h 0.262 c 0.625,6.7578 1.898,14.0156 4.003,23.7109 l 5.344,24.0234 h 12 L 773.773,1.08594 h -13.242 l -6.972,26.35546 c -2.188,9.0313 -3.473,15 -4.649,23.0469 h -0.273 C 747.68,44.0039 745.766,34.707 743.441,24.2109 L 738.227,1.08594 h -11.903"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path11"
          d="m 807.445,54.8047 h -15.816 l 2.867,12.3437 h 44.516 L 836.234,54.8047 H 820.238 L 808.188,1.08594 h -12.793 l 12.05,53.71876"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path12"
          d="m 889.938,36.3672 c 1.414,-0.3047 2.722,-0.4883 4.949,-0.4883 7.648,0 12.992,5.3906 13.34,12.0586 0.332,6.2734 -3.653,8.332 -8.633,8.332 -2.403,0 -4.176,-0.207 -5.25,-0.3906 z m -5.833,29.5117 c 3.868,1.0742 9.864,1.6602 15.649,1.6602 5.418,0 11.492,-0.9844 15.664,-4.4141 3.941,-2.9297 6.094,-7.6367 5.75,-14.0156 -0.43,-8.2305 -4.23,-14.6055 -9.055,-18.5235 -5.117,-4.2187 -12.226,-6.1718 -19.511,-6.1718 -2.137,0 -3.907,0.2929 -5.223,0.3906 L 882.047,1.08594 h -12.531 l 14.589,64.79296"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path13"
          d="m 940.711,37.7344 h 5.23 c 6.938,0 12.247,4.6094 12.579,11.082 0.277,5.293 -3.59,7.6367 -8.75,7.6367 -2.403,0 -3.926,-0.1836 -5,-0.4765 z m -6.352,28.1445 c 4.043,1.0742 10.118,1.6602 16.075,1.6602 5.695,0 11.504,-0.8789 15.531,-3.8164 3.777,-2.5625 6.316,-6.6719 5.996,-12.8438 -0.512,-9.8164 -6.699,-15.8906 -14.574,-18.6211 l -0.02,-0.3047 c 3.457,-1.7578 4.848,-6.0742 5.063,-12.0429 0.41,-7.4493 0.398,-16.08207 1.328,-18.82426 h -13.156 c -0.43,1.76562 -0.774,7.44922 -0.872,15.59376 -0.195,8.0273 -2.554,10.4687 -7.625,10.4687 h -3.917 L 932.387,1.08594 H 919.77 l 14.589,64.79296"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path14"
          d="m 998.172,11.7578 c 10.308,0 18.158,16.0742 18.828,28.5235 0.43,8.2343 -1.83,16.1718 -11.25,16.1718 -10.754,0 -18.598,-15.8672 -19.262,-28.4179 -0.484,-9.3125 2.973,-16.2774 11.582,-16.2774 z M 995.766,0 c -15.547,0 -23.614,12.1563 -22.813,27.5508 0.625,11.8633 5.227,23.5117 12.473,31.082 5.91,5.9649 13.836,9.5899 22.534,9.5899 15.84,0 23.57,-11.7696 22.73,-27.5313 C 1030.06,28.7227 1025.63,16.9531 1018.5,9.60938 1012.66,3.51563 1004.84,0 995.863,0 h -0.097"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path15"
          d="m 1044.28,67.1484 h 35.12 l -2.77,-12.0703 h -22.23 l -3.55,-15.4687 h 20.87 l -2.75,-11.875 h -20.8 l -5.92,-26.64846 h -12.81 l 14.84,66.06246"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path16"
          d="m 1114.1,29.2109 h -21.24 l -3.6,-16.0859 h 23.91 L 1110.4,1.08594 h -36.68 l 14.82,66.06246 h 35.45 l -2.75,-12.0703 h -22.58 l -3.22,-14.0156 h 21.42 l -2.76,-11.8516"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path17"
          d="m 1125.03,16.3789 c 3.43,-2.3555 8.32,-4.2226 13.91,-4.2226 4.89,0 9.55,2.5507 9.82,7.6484 0.19,3.8281 -2.25,6.1719 -7.59,9.4062 -6.12,3.7266 -11.89,9.0118 -11.44,17.5469 0.7,13.3203 11.61,21.4649 24.67,21.4649 7.21,0 11.39,-1.7696 13.89,-3.2344 l -4.63,-11.7461 c -1.89,1.1719 -5.98,2.9297 -10.96,2.8203 -5.95,0 -9.22,-3.2305 -9.41,-6.8516 -0.22,-3.9296 3.3,-6.2734 8.2,-9.4062 7.07,-4.2188 11.33,-9.6094 10.91,-17.5469 C 1161.63,7.55078 1150.21,0 1136.96,0 c -8.24,0.0976563 -14.16,2.44141 -16.8,4.70703 l 4.87,11.67187"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path18"
          d="m 1169.87,16.3789 c 3.42,-2.3555 8.3,-4.2226 13.91,-4.2226 4.88,0 9.55,2.5507 9.81,7.6484 0.21,3.8281 -2.26,6.1719 -7.59,9.4062 -6.11,3.7266 -11.87,9.0118 -11.42,17.5469 0.69,13.3203 11.6,21.4649 24.66,21.4649 7.2,0 11.37,-1.7696 13.87,-3.2344 l -4.61,-11.7461 c -1.89,1.1719 -5.98,2.9297 -10.95,2.8203 -5.97,0 -9.24,-3.2305 -9.44,-6.8516 -0.19,-3.9296 3.32,-6.2734 8.22,-9.4062 7.07,-4.2188 11.31,-9.6094 10.9,-17.5469 C 1206.45,7.55078 1195.05,0 1181.8,0 c -8.26,0.0976563 -14.18,2.44141 -16.81,4.70703 l 4.88,11.67187"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path19"
          d="M 1239.81,67.1484 1224.98,1.08594 h -12.81 l 14.85,66.06246 h 12.79"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path20"
          d="m 1265.03,11.7578 c 10.31,0 18.16,16.0742 18.81,28.5235 0.44,8.2343 -1.82,16.1718 -11.24,16.1718 -10.74,0 -18.61,-15.8672 -19.25,-28.4179 -0.49,-9.3125 2.96,-16.2774 11.58,-16.2774 z M 1262.63,0 c -15.55,0 -23.64,12.1563 -22.82,27.5508 0.63,11.8633 5.24,23.5117 12.46,31.082 5.92,5.9649 13.85,9.5899 22.56,9.5899 15.81,0 23.55,-11.7696 22.72,-27.5313 -0.63,-11.9687 -5.06,-23.7383 -12.19,-31.08202 C 1279.52,3.51563 1271.69,0 1262.72,0 h -0.09"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path21"
          d="m 1296.1,1.08594 14.84,66.06246 h 15.02 l 6.59,-25.1953 c 1.95,-8.4375 3.2,-15.2929 4.23,-22.539 h 0.28 c 0.62,6.7578 1.89,14.0156 4,23.7109 l 5.33,24.0234 h 12 L 1343.56,1.08594 h -13.24 l -6.97,26.35546 c -2.21,9.0313 -3.48,15 -4.66,23.0469 h -0.27 c -0.96,-6.4844 -2.87,-15.7813 -5.19,-26.2774 l -5.22,-23.12496 h -11.91"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path22"
          d="m 1388.31,29.0234 -0.41,14.1993 c -0.08,3.6406 -0.06,8.9257 -0.12,12.9492 h -0.27 c -1.72,-4.0235 -3.67,-9.1211 -5.47,-12.9492 l -6.6,-14.1993 z m -17.27,-10.7812 -7.91,-17.15626 h -13.69 l 32.7,66.06246 h 16.44 l 3.46,-66.06246 h -13.42 l -0.34,17.15626 h -17.24"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path23"
          d="m 1421.69,67.1484 h 12.81 l -12.07,-53.7187 h 23.04 l -2.79,-12.34376 h -35.82 l 14.83,66.06246"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path24"
          d="m 1452.64,16.3789 c 3.46,-2.3555 8.32,-4.2226 13.93,-4.2226 4.88,0 9.54,2.5507 9.8,7.6484 0.2,3.8281 -2.24,6.1719 -7.57,9.4062 -6.14,3.7266 -11.88,9.0118 -11.45,17.5469 0.7,13.3203 11.62,21.4649 24.69,21.4649 7.18,0 11.36,-1.7696 13.86,-3.2344 l -4.62,-11.7461 c -1.88,1.1719 -5.97,2.9297 -10.95,2.8203 -5.96,0 -9.23,-3.2305 -9.43,-6.8516 -0.2,-3.9296 3.32,-6.2734 8.23,-9.4062 7.05,-4.2188 11.31,-9.6094 10.89,-17.5469 C 1489.25,7.55078 1477.82,0 1464.6,0 c -8.27,0.0976563 -14.18,2.44141 -16.82,4.70703 l 4.86,11.67187"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path25"
          d="m 371.742,103.43 c -26.441,41.277 -60.371,105.523 -63.855,112.898 h 93.543 c 23.285,-39.933 32.539,-46.543 56.465,-90.586 9.433,-14.972 -0.079,-28.5623 -16.637,-28.8475 -27.738,0.3907 -29.961,-0.0312 -57.68,0.0586 -3.75,0.2813 -9.551,3.4299 -11.836,6.4769 v 0"
          style="fill:#1574c4;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path26"
          d="M 186.664,24.5781 C 214.969,86.0859 265.965,163.254 307.887,216.328 H 401.43 C 345.23,155.066 287.738,77.9375 244.594,6.86328 242.992,4.59766 238.93,1.5625 236.07,1.40625 221.285,2.03125 206.5,0.859375 191.723,1.58203 180.777,2.73438 183.797,17.9883 186.664,24.5781 v 0"
          style="fill:#2f97da;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path27"
          d="m 307.887,228.457 c 58.703,66.047 125.34,125.84 202.07,170.332 3.254,1.672 7.578,2.695 11.262,3.008 22.047,1.875 42.515,3.281 63.836,2.988 7.722,-0.105 20.789,-5.176 9.715,-12.012 C 525.418,352.598 457.895,285 401.43,228.457 h -93.543 v 0"
          style="fill:#2f97da;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path28"
          d="m 259.84,314.891 c -3.723,9.66 7.176,18.156 14.773,25.89 5.637,5.754 9.883,9.766 26.899,25.985 6.383,6.086 12.379,2.289 14.527,-0.789 20,-27.567 77.133,-124.817 85.391,-137.52 h -93.543 c -12.305,23.547 -39.114,62.578 -48.047,86.434 v 0"
          style="fill:#1574c4;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path29"
          d="m 339.438,371.32 c 0,22.559 18.3,40.368 40.863,39.793 22.578,-0.597 40.879,-19.375 40.879,-41.933 0,-22.578 -18.301,-40.391 -40.879,-39.805 -22.563,0.598 -40.863,19.375 -40.863,41.945 v 0"
          style="fill:#1574c4;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path30"
          d="m 639.391,252.02 c -0.34,9.035 -2.93,15.941 -7.723,20.753 -4.785,4.793 -13.125,7.215 -25.023,7.215 -6.114,0 -12.071,-0.925 -17.887,-2.761 -5.824,-1.836 -11.953,-4.239 -18.418,-7.207 l -19.477,-84.063 c 3.762,-1.387 8.106,-2.449 13.059,-3.203 4.941,-0.75 10.008,-1.113 15.207,-1.113 10.523,0 19.762,1.922 27.715,5.8 7.949,3.875 14.285,8.985 19,15.332 4.726,6.231 8.273,13.543 10.605,21.934 2.348,8.391 3.321,17.481 2.942,27.313 z m -61.563,48.781 c 11.668,7.297 22.473,12.969 32.422,17.031 9.941,4.043 20.984,6.074 33.152,6.074 19.707,0 34.934,-5.39 45.688,-16.183 10.758,-10.782 16.328,-25.719 16.715,-44.813 0.312,-16.172 -2.285,-31.847 -7.832,-47.012 -5.543,-15.175 -13.258,-28.242 -23.106,-39.187 -10.301,-11.566 -22.019,-20.578 -35.152,-27.063 -13.125,-6.457 -27.922,-9.687 -44.367,-9.687 -10.418,0 -20.91,0.312 -28.809,1.387 -8.476,1.14 -17.715,2.89 -24.855,6.75 l -10.293,-41.965 c -1.036,-4.395 -7.262,-9.3361 -11.778,-9.3361 h -38.101 c -8.578,0 -13.762,6.5621 -11.789,14.9141 l 47.238,198.074 c 1.043,4.395 7.281,9.328 11.797,9.328 h 38.086 c 8.574,0 13.765,-6.574 11.793,-14.902 l -0.809,-3.41 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:evenodd;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path31"
          d="m 879.223,263.125 c -1.356,-5.891 -8.043,-10.266 -14.004,-9.172 -2.403,0.461 -5,0.781 -7.723,1.035 -5.652,0.528 -11.25,0.793 -16.785,0.793 -9.121,0 -17.949,-0.683 -26.43,-2.031 -8.496,-1.34 -17.234,-3.496 -26.238,-6.465 L 754.848,106.191 c -1.035,-4.433 -7.254,-9.3941 -11.793,-9.3941 h -45.137 c -8.527,0 -13.734,6.5511 -11.801,14.8441 l 46.367,198.066 c 1.02,4.426 7.246,9.375 11.797,9.375 h 45.129 c 8.524,0 13.723,-6.543 11.809,-14.844 l -3.949,-17.031 c 13.125,9.656 26.21,17.52 39.281,23.574 13.043,6.067 26.238,9.102 39.492,9.102 8.172,-0.203 12.984,-5.047 13.102,-11.375 0.238,-13.285 -9.922,-45.383 -9.922,-45.383 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path32"
          d="m 1273.37,267.18 c -12.98,4.461 -26.31,6.699 -40,6.699 -14.85,0 -26.23,-1.77 -34.18,-5.316 -7.99,-3.563 -11.92,-9.032 -11.92,-16.329 0,-5.554 3.32,-9.949 10.28,-13.023 6.83,-3.02 17.62,-6.145 32.34,-9.348 27.36,-5.918 47.09,-13.39 59.17,-22.39 12.06,-8.996 18.11,-21.614 18.11,-37.825 0,-24.187 -11.07,-43.269 -33.22,-57.238 -22.13,-13.953 -52.06,-20.9256 -89.77,-20.9256 -18.54,0 -36.5,1.7187 -53.88,5.1953 -12.33,2.4609 -22.23,5.1563 -29.94,7.9183 -5.13,1.855 -8.94,8.859 -7.7,14.152 l 7.74,33.035 c 2.24,9.641 10.52,12.824 18.67,7.199 l 1.76,-1.23 c 4.33,-2.941 10.58,-6.066 18.59,-9.27 6.78,-2.898 14.75,-5.449 23.66,-7.546 9.03,-2.11 18.76,-3.165 29.21,-3.165 15.61,0 27.32,1.805 35.12,5.403 7.88,3.66 11.7,8.828 11.7,15.465 0,5.082 -2.72,9.035 -8.32,11.769 -5.57,2.703 -17.06,6.043 -34.48,10.051 -29.57,6.797 -49.81,15.047 -60.72,24.684 -10.92,9.66 -16.37,21.691 -16.37,36.093 0,24.438 10.94,43.703 32.86,57.793 21.88,14.094 51.5,21.145 88.86,21.145 16.23,0 32.45,-1.641 48.69,-4.942 10.59,-2.136 18.99,-4.328 25.38,-6.433 5.38,-1.77 9.28,-8.723 7.99,-14.25 l -7.22,-31.067 c -2.13,-9.148 -10.11,-12.476 -18.12,-7.578 -7.19,4.399 -15.27,8.157 -24.29,11.274 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path33"
          d="m 1487.88,267.18 c -12.99,4.461 -26.31,6.699 -40,6.699 -14.85,0 -26.23,-1.77 -34.18,-5.316 -8,-3.563 -11.91,-9.032 -11.91,-16.329 0,-5.554 3.31,-9.949 10.27,-13.023 6.83,-3.02 17.61,-6.145 32.34,-9.348 27.36,-5.918 47.09,-13.39 59.16,-22.39 12.07,-8.996 18.11,-21.614 18.11,-37.825 0,-24.187 -11.06,-43.269 -33.21,-57.238 -22.13,-13.953 -52.06,-20.9256 -89.77,-20.9256 -18.55,0 -36.5,1.7187 -53.87,5.1953 -12.33,2.4609 -22.25,5.1563 -29.95,7.9183 -5.14,1.855 -8.94,8.859 -7.7,14.152 l 7.73,33.035 c 2.25,9.641 10.54,12.824 18.68,7.199 l 1.77,-1.23 c 4.31,-2.941 10.58,-6.066 18.58,-9.27 6.78,-2.898 14.75,-5.449 23.65,-7.546 9.03,-2.11 18.77,-3.165 29.22,-3.165 15.61,0 27.31,1.805 35.12,5.403 7.88,3.66 11.7,8.828 11.7,15.465 0,5.082 -2.72,9.035 -8.32,11.769 -5.57,2.703 -17.07,6.043 -34.47,10.051 -29.57,6.797 -49.82,15.047 -60.73,24.684 -10.91,9.66 -16.36,21.691 -16.36,36.093 0,24.438 10.93,43.703 32.84,57.793 21.88,14.094 51.51,21.145 88.88,21.145 16.22,0 32.45,-1.641 48.67,-4.942 10.6,-2.136 19,-4.328 25.39,-6.433 5.38,-1.77 9.29,-8.723 8.01,-14.25 l -7.24,-31.067 c -2.14,-9.148 -10.11,-12.476 -18.13,-7.578 -7.17,4.399 -15.27,8.157 -24.28,11.274 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path34"
          d="m 127.484,334.348 -14.121,-63.137 h 112.121 c 8.543,0 13.739,-6.563 11.786,-14.883 l -7.34,-31.465 c -1.039,-4.402 -7.27,-9.355 -11.797,-9.355 H 100.512 L 85.4727,152.336 H 207.016 c 8.476,0 13.683,-6.516 11.82,-14.785 l -7.133,-31.465 c -1.015,-4.484 -7.226,-9.4532 -11.816,-9.4532 H 12.1914 c -8.51171,0 -13.71093,6.5432 -11.796869,14.8402 L 62.5234,380.664 c 1.0196,4.434 7.2461,9.387 11.7969,9.387 H 256.195 c 8.52,0 13.711,-6.543 11.797,-14.828 l -7.246,-31.481 c -1.016,-4.445 -7.242,-9.394 -11.805,-9.394 H 127.484 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path35"
          d="m 1078.33,118.555 c -0.47,-1.992 -5.39,-9.258 -7.3,-10.02 -11.77,-4.734 -25.59,-8.39 -38.41,-10.9842 -14.98,-3.0469 -30.91,-6.0664 -47.839,-6.0664 -37.043,0 -65.636,8.1719 -85.781,24.5236 -20.129,16.336 -30.203,38.953 -30.203,67.808 0,19.7 3.289,37.793 9.859,54.282 6.582,16.48 16.074,30.965 28.457,43.465 11.856,12.097 26.7,21.691 44.504,28.789 17.805,7.07 37.352,10.625 58.643,10.625 32.38,0 50.74,-6.551 67.19,-19.629 16.43,-13.078 24.67,-32.375 24.67,-57.918 0,-8.774 -0.88,-17.336 -2.62,-25.707 -1.13,-5.465 -2.5,-10.887 -4.12,-16.297 -1.16,-3.906 -7.52,-8.653 -11.6,-8.653 H 936.844 v -2.207 -2.207 c 0,-15 5.308,-26.699 15.933,-35.136 10.625,-8.457 26.875,-12.688 48.773,-12.688 15.28,0 29.75,4.094 43.42,9.25 7.56,2.844 16.15,7.403 22.73,10.684 11.39,5.664 20.06,-1.203 17.19,-13.574 l -6.56,-28.34 z m -39.01,127.351 c 0,10.207 -3.19,18 -9.54,23.41 -6.36,5.411 -15.52,8.125 -27.47,8.125 -14.415,0 -26.525,-3.878 -36.33,-11.613 -9.8,-7.73 -17.246,-18.492 -22.3,-32.312 h 94.48 c 0.38,2.312 0.67,4.453 0.87,6.375 0.19,1.957 0.29,3.937 0.29,6.015 v 0"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:evenodd;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
       <path
-
+         id="path36"
          d="m 1563.76,308.852 h 2.62 c 2.92,0 5.4,0.871 5.4,3.386 0,2.02 -1.25,3.391 -5.01,3.391 -1.5,0 -2.37,-0.106 -3.01,-0.234 z m 0,-11.805 h -3.88 v 20.969 c 2.13,0.386 4.36,0.648 7.27,0.648 3.51,0 5.26,-0.648 6.66,-1.637 1.27,-0.879 2.14,-2.535 2.14,-4.406 0,-2.641 -1.88,-4.273 -4.17,-5.023 v -0.25 c 1.9,-0.75 2.92,-2.383 3.54,-5.039 0.63,-3.243 0.99,-4.512 1.51,-5.262 h -4.03 c -0.63,0.75 -1.12,2.644 -1.64,5.519 -0.5,2.258 -1.86,3.278 -4.88,3.278 h -2.52 z m 3.5,27.512 c -9.04,0 -15.94,-7.411 -15.94,-16.45 0,-9.308 6.9,-16.582 16.19,-16.582 9.07,-0.132 15.7,7.274 15.7,16.457 0,9.164 -6.63,16.575 -15.8,16.575 z m 0.25,3.523 c 11.32,0 20.22,-8.801 20.22,-19.973 0,-11.425 -8.9,-20.234 -20.32,-20.234 -11.44,0 -20.48,8.809 -20.48,20.234 0,11.172 9.04,19.973 20.48,19.973 h 0.1"
          style="fill:#0d4d84;fill-opacity:1;fill-rule:nonzero;stroke:none"
          transform="matrix(0.13333333,0,0,-0.13333333,0,54.813333)" />
     </g>
   </g>
-</svg></div>
-
-  <header class="header-bar">
-    <div class="brand-mark" aria-hidden="true">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-    <div class="header-logo">
-      Team 9
-      <span>Sprint Demo</span>
-    </div>
-  </header>
-
-  <section class="hero-wrap">
-    <div class="hero">
-      <div class="hero-label">Team 9</div>
-      <h1>Sprint 36 &mdash; Progress Update</h1>
-      <div class="sub">May 21 - June 3, 2026</div>
-      <div class="rollout">Target Rollout &mdash; September 2026</div>
-    </div>
-  </section>
-
-  <main class="wrap">
-      <section class="summary">
-        <div class="summary-label">Sprint 36 at a Glance</div>
-        <div class="summary-grid">
-            <div class="summary-item" data-icon="✓">Completed the yabadabado integration</div>
-            <div class="summary-item" data-icon="✓">Flinstone API routed to Tesla</div>
-            <div class="summary-item" data-icon="⏭️">Next: Update state management on the protocol thingamagig</div>
-        </div>
-      </section>
-
-      <section class="sec">
-        <div class="sec-label">Infrastructure &amp; Readiness</div>
-        <div class="sec-title">Platform Improvements</div>
-        <div class="cards">
-            <article class="card">
-              <div class="card-kicker">
-                <span class="card-icon">🔐</span>
-                <span>Security</span>
-              </div>
-              <p>ADT Integration complete</p>
-            </article>
-            <article class="card">
-              <div class="card-kicker">
-                <span class="card-icon">⬆️</span>
-                <span>Framework</span>
-              </div>
-              <p>Door lighting has been completed with first edition Edison Bulbs</p>
-            </article>
-            <article class="card">
-              <div class="card-kicker">
-                <span class="card-icon">🎓</span>
-                <span>DevOps</span>
-              </div>
-              <p>Increased AWS bandwidth to support more brake fluid</p>
-            </article>
-        </div>
-      </section>
-
-      <section class="sec">
-        <div class="sec-label">Sprint Health</div>
-        <div class="sec-title">Sprint 36 Metrics</div>
-        <div class="metrics">
-            <article class="metric">
-              <div class="metric-value green">91%</div>
-              <div class="metric-label">Completion Rate</div>
-            </article>
-            <article class="metric">
-              <div class="metric-value blue">18</div>
-              <div class="metric-label">Completed Items</div>
-            </article>
-            <article class="metric">
-              <div class="metric-value green">1</div>
-              <div class="metric-label">Open Risks</div>
-            </article>
-            <article class="metric">
-              <div class="metric-value blue">0</div>
-              <div class="metric-label">Unestimated Items</div>
-            </article>
-        </div>
-      </section>
-
-        <section class="sec">
-          <div class="sec-label">What We Delivered</div>
-          <div class="sec-title">Story 1</div>
-            <ul class="bl">
-                <li>You know the story is that the story is done.</li>
-            </ul>
-            <div class="impact">
-              <span class="t">Business Value</span>
-              <span class="m">Business can now monetize the story.</span>
-            </div>
-        </section>
-        <section class="sec">
-          <div class="sec-label">What We Delivered</div>
-          <div class="sec-title">Story 2</div>
-            <ul class="bl">
-                <li>Big deal type of thing.</li>
-            </ul>
-        </section>
-        <section class="sec">
-          <div class="sec-label">What We Delivered</div>
-          <div class="sec-title">Story 3</div>
-            <ul class="bl">
-                <li>Another Big Deal Delivered</li>
-            </ul>
-        </section>
-        <section class="sec">
-          <div class="sec-label">What We Delivered</div>
-          <div class="sec-title">Story 4</div>
-            <ul class="bl">
-                <li>Quarterly Business Goals, Future Expectations, and Year-End Gross Margin screens were completed and closed this sprint</li>
-            </ul>
-            <div class="impact">
-              <span class="t">Business Value</span>
-              <span class="m">3 more planning screens completed with goal entry and ready for data connection in upcoming sprints</span>
-            </div>
-        </section>
-
-      <section class="sec">
-        <div class="demo">
-          <strong>Live Demo</strong>
-            <div>Now Elon Musk will throw a rock at a cyber truck window</div>
-        </div>
-      </section>
-
-      <section class="sec">
-        <div class="sec-label">Looking Ahead</div>
-        <div class="sec-title">Up Next</div>
-        <div class="next">
-            <article class="next-row">
-              <span class="next-badge badge-qa">In QA</span>
-              <span class="next-text"><strong>Testing Lorem Ipsun in all languages</strong> &mdash; What does it mean? We have to find out.</span>
-            </article>
-            <article class="next-row">
-              <span class="next-badge badge-active">Active</span>
-              <span class="next-text"><strong>RBAC Support</strong> &mdash; Users see only the offices they are authorized to access</span>
-            </article>
-            <article class="next-row">
-              <span class="next-badge badge-planned">Planned</span>
-              <span class="next-text"><strong>OpenAI Integration</strong> &mdash; Like do a LLM.</span>
-            </article>
-        </div>
-      </section>
-  </main>
-
-  <footer class="footer">
-    Express Employment Professionals - Team 9 - Sprint 36 - June 2026
-    <div class="footer-copy">Generated 2026-06-16 from the sprint demo workbook.</div>
-  </footer>
-</body>
-</html>
+</svg>
