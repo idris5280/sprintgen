@@ -22,7 +22,12 @@ const app = express();
 const port = process.env.PORT || 3000;
 const runtimeDir = path.join(projectRoot, "runtime");
 const jobsDir = path.join(runtimeDir, "jobs");
+const savedReviewsDir = process.env.SCRUM_STUDIO_DATA_DIR
+  ? path.resolve(process.env.SCRUM_STUDIO_DATA_DIR)
+  : path.join(process.env.APPDATA || runtimeDir, "ScrumStudio", "reviews");
 const sampleWorkbookPath = path.join(projectRoot, "input", "sample-sprint-demo.xlsx");
+const lobbyDistDir = path.join(projectRoot, "apps", "lobby", "dist");
+const lobbyIndexPath = path.join(lobbyDistDir, "index.html");
 const maxUploadBytes = 8 * 1024 * 1024;
 const maxJobAgeMs = 6 * 60 * 60 * 1000;
 const adoConfig = getAdoConfig();
@@ -33,6 +38,7 @@ const adoSessions = new Map();
 
 function ensureRuntimeDirs() {
   fs.mkdirSync(jobsDir, { recursive: true });
+  fs.mkdirSync(savedReviewsDir, { recursive: true });
 }
 
 function escapeHtml(value) {
@@ -153,8 +159,12 @@ function createJobId(req, res, next) {
   next();
 }
 
+function isUuid(value) {
+  return /^[a-f0-9-]{36}$/i.test(String(value || ""));
+}
+
 function getJobDir(jobId) {
-  if (!/^[a-f0-9-]{36}$/i.test(jobId)) {
+  if (!isUuid(jobId)) {
     throw new Error("Invalid job id.");
   }
 
@@ -179,6 +189,33 @@ function getJobPaths(jobId) {
     pdfPath: path.join(jobDir, "sprint-demo.pdf"),
     adoDataPath: path.join(jobDir, "ado-report.json"),
     metaPath: path.join(jobDir, "metadata.json")
+  };
+}
+
+function getSavedReviewDir(reviewId) {
+  if (!isUuid(reviewId)) {
+    throw new Error("Invalid review id.");
+  }
+
+  const reviewDir = path.join(savedReviewsDir, reviewId);
+  const resolvedReviewsDir = path.resolve(savedReviewsDir);
+  const resolvedReviewDir = path.resolve(reviewDir);
+
+  if (!resolvedReviewDir.startsWith(resolvedReviewsDir)) {
+    throw new Error("Invalid review path.");
+  }
+
+  return reviewDir;
+}
+
+function getSavedReviewPaths(reviewId) {
+  const reviewDir = getSavedReviewDir(reviewId);
+
+  return {
+    reviewDir,
+    dataPath: path.join(reviewDir, "review.json"),
+    htmlPath: path.join(reviewDir, "sprint-review.html"),
+    pdfPath: path.join(reviewDir, "sprint-review.pdf")
   };
 }
 
@@ -208,6 +245,208 @@ function cleanupOldJobs() {
   }
 }
 
+function stripSensitiveReviewKeys(value) {
+  if (Array.isArray(value)) {
+    return value.map(stripSensitiveReviewKeys);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const blockedKeys = new Set([
+    "authorization",
+    "auth",
+    "cookie",
+    "password",
+    "pat",
+    "personalaccesstoken",
+    "session",
+    "token"
+  ]);
+
+  return Object.entries(value).reduce((clean, [key, entry]) => {
+    const normalizedKey = String(key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    if (blockedKeys.has(normalizedKey)) {
+      return clean;
+    }
+
+    clean[key] = stripSensitiveReviewKeys(entry);
+    return clean;
+  }, {});
+}
+
+function createSavedReviewFromReport(report, existingReview = null) {
+  const result = report.result || {};
+  const iteration = result.iteration || {};
+  const now = new Date().toISOString();
+  const id = (existingReview && existingReview.id) || crypto.randomUUID();
+
+  return stripSensitiveReviewKeys({
+    id,
+    createdAt: (existingReview && existingReview.createdAt) || now,
+    updatedAt: now,
+    generatedAt: report.generatedAt || now.slice(0, 10),
+    team: result.team || "",
+    sprintName: iteration.name || getSprintLabel(iteration.path),
+    sprintPath: iteration.path || "",
+    areaPath: result.areaPath || "",
+    dateRange: {
+      startDate: iteration.startDate || "",
+      finishDate: iteration.finishDate || ""
+    },
+    result: report.result || null,
+    nextIteration: report.nextIteration || null,
+    nextWorkItems: report.nextWorkItems || {
+      source: "Not saved",
+      count: 0,
+      items: [],
+      warning: ""
+    },
+    narrative: report.narrative || {},
+    pdf: report.pdf || {
+      available: false,
+      error: ""
+    },
+    generation: {
+      source: "Azure DevOps snapshot",
+      app: "Scrum Studio"
+    }
+  });
+}
+
+function readSavedReview(reviewId) {
+  const paths = getSavedReviewPaths(reviewId);
+
+  if (!fs.existsSync(paths.dataPath)) {
+    throw new Error("That saved review was not found.");
+  }
+
+  return JSON.parse(fs.readFileSync(paths.dataPath, "utf8").replace(/^\uFEFF/, ""));
+}
+
+function writeSavedReviewData(review) {
+  const paths = getSavedReviewPaths(review.id);
+  const cleanReview = stripSensitiveReviewKeys(review);
+
+  fs.mkdirSync(paths.reviewDir, { recursive: true });
+  fs.writeFileSync(paths.dataPath, JSON.stringify(cleanReview, null, 2), "utf8");
+  return cleanReview;
+}
+
+async function writeSavedReviewArtifacts(review) {
+  const paths = getSavedReviewPaths(review.id);
+  const cleanReview = stripSensitiveReviewKeys(review);
+
+  fs.mkdirSync(paths.reviewDir, { recursive: true });
+  fs.writeFileSync(paths.htmlPath, renderAdoReportHtml(cleanReview), "utf8");
+  cleanReview.pdf = {
+    available: false,
+    error: ""
+  };
+
+  try {
+    await exportPdf(paths.htmlPath, paths.pdfPath);
+    cleanReview.pdf = {
+      available: true,
+      error: ""
+    };
+  } catch (pdfError) {
+    cleanReview.pdf = {
+      available: false,
+      error: summarizePdfExportError(pdfError)
+    };
+  }
+
+  return writeSavedReviewData(cleanReview);
+}
+
+function listSavedReviews() {
+  ensureRuntimeDirs();
+
+  return fs
+    .readdirSync(savedReviewsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && isUuid(entry.name))
+    .map((entry) => {
+      try {
+        return readSavedReview(entry.name);
+      } catch (error) {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+}
+
+function buildDraftFromSavedReview(review) {
+  const result = review.result || {};
+  const currentItems = normalizeStoryItems(result.workItems && result.workItems.items);
+  const completedItems =
+    result.metrics && result.metrics.items ? normalizeStoryItems(result.metrics.items.completed) : [];
+  const nextWorkItems = review.nextWorkItems || {
+    source: "Saved snapshot",
+    count: 0,
+    items: [],
+    warning: ""
+  };
+  const nextItems = normalizeStoryItems(nextWorkItems.items);
+
+  return {
+    result,
+    currentItems,
+    completedItems,
+    nextIteration: review.nextIteration || null,
+    nextWorkItems: {
+      ...nextWorkItems,
+      items: nextItems,
+      count: nextItems.length
+    }
+  };
+}
+
+function storyIdsFromSelection(stories) {
+  return (stories || []).map((story) => story && story.id).filter((id) => id !== undefined && id !== null);
+}
+
+function remapNarrativeStories(narrative, currentItems, nextItems) {
+  const currentNarrative = narrative || {};
+
+  return {
+    ...currentNarrative,
+    updates: (currentNarrative.updates || []).map((update) => ({
+      ...update,
+      stories: selectStoriesById(currentItems, storyIdsFromSelection(update.stories))
+    })),
+    nextSteps: {
+      ...(currentNarrative.nextSteps || {}),
+      stories: selectStoriesById(nextItems, storyIdsFromSelection(currentNarrative.nextSteps && currentNarrative.nextSteps.stories))
+    }
+  };
+}
+
+function getSavedReviewDownloadName(review) {
+  const result = (review && review.result) || {};
+  const iteration = result.iteration || {};
+  return getHtmlDownloadName(iteration.name || review.sprintName || "sprint-review");
+}
+
+function formatSavedTimestamp(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 function renderPage({ title, bodyClass = "", content }) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -218,7 +457,7 @@ function renderPage({ title, bodyClass = "", content }) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css?v=1">
+  <link rel="stylesheet" href="/assets/styles.css?v=3">
 </head>
 <body class="${escapeHtml(bodyClass)}">
   <div class="confetti-sprinkle" aria-hidden="true"></div>
@@ -229,13 +468,63 @@ function renderPage({ title, bodyClass = "", content }) {
 </html>`;
 }
 
-function renderHomePage({ error = "" } = {}) {
-  return renderAdoAdminConnectPage({
-    error: error
-      ? {
-          message: error
-        }
-      : null
+function renderHomePage() {
+  return renderPage({
+    title: "Scrum Studio",
+    bodyClass: "studio-page",
+    content: `
+      <section class="studio-home" aria-labelledby="studio-main-title">
+        <header class="studio-header" aria-label="Scrum Studio">
+          <a class="studio-brand" href="/" aria-label="Scrum Studio home">
+            <span class="studio-brand-mark" aria-hidden="true"></span>
+            <span>Scrum Studio</span>
+          </a>
+        </header>
+
+        <div class="studio-intro">
+          <p class="studio-eyebrow">Workspace picker</p>
+          <h1 id="studio-main-title">What are you working on today?</h1>
+          <p>Choose the workspace that fits the scrum work in front of you.</p>
+        </div>
+
+        <div class="studio-tool-grid" aria-label="Scrum Studio tools">
+          <a class="studio-tool-card studio-tool-card-lobby" href="/lobby" aria-labelledby="studio-lobby-title" aria-describedby="studio-lobby-description">
+            <span class="studio-tool-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" role="img">
+                <rect x="3" y="4" width="18" height="13" rx="2.5"></rect>
+                <path d="M8 21h8"></path>
+                <path d="M12 17v4"></path>
+                <path d="M8.5 10.5h7"></path>
+              </svg>
+            </span>
+            <div class="studio-tool-copy">
+              <span class="studio-tool-label">Team waiting room</span>
+              <h2 id="studio-lobby-title">Lobby</h2>
+              <p id="studio-lobby-description">Join or host the screen-shared waiting room with countdown, prompts, weather, and music for any scrum ceremony.</p>
+            </div>
+            <span class="studio-tool-button">Open Lobby</span>
+          </a>
+
+          <a class="studio-tool-card studio-tool-card-build" href="/ado-admin" aria-labelledby="studio-build-title" aria-describedby="studio-build-description">
+            <span class="studio-tool-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" role="img">
+                <path d="M7 3h7l4 4v14H7z"></path>
+                <path d="M14 3v5h5"></path>
+                <path d="M10 12h6"></path>
+                <path d="M10 16h6"></path>
+                <path d="M10 20h3"></path>
+              </svg>
+            </span>
+            <div class="studio-tool-copy">
+              <span class="studio-tool-label">Sprint reviews</span>
+              <h2 id="studio-build-title">Review Builder</h2>
+              <p id="studio-build-description">Create and prepare sprint review materials from ADO, then generate the HTML report and presentation mode.</p>
+            </div>
+            <span class="studio-tool-button">Open Review Builder</span>
+          </a>
+        </div>
+      </section>
+    `
   });
 }
 
@@ -964,7 +1253,17 @@ async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "" }) {
   };
 }
 
-function renderAdoReviewBuilderContent({ draft, error = null, inline = false } = {}) {
+function renderAdoReviewBuilderContent({
+  draft,
+  error = null,
+  inline = false,
+  narrative = null,
+  action = "/ado-admin/generate-report",
+  submitLabel = "Generate Report",
+  backHref = "",
+  backLabel = "Back to selections",
+  savedMode = false
+} = {}) {
   if (!draft) {
     return `
         <section class="result-card error-card">
@@ -972,7 +1271,7 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
           <h1>Load a team and sprint first.</h1>
           <p class="lede">${escapeHtml(error && error.message ? error.message : "Choose a sprint to start the review builder.")}</p>
           <div class="result-actions">
-            <a class="primary-button" href="/ado-admin">Back to SprintGen</a>
+            <a class="primary-button" href="/ado-admin">Back to Review Builder</a>
           </div>
         </section>
       `;
@@ -982,6 +1281,18 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
   const metrics = result.metrics || {};
   const totals = metrics.totals || {};
   const nextLabel = draft.nextIteration ? draft.nextIteration.name : "Next sprint";
+  const currentNarrative = narrative || {};
+  const narrativeUpdates = Array.isArray(currentNarrative.updates) ? currentNarrative.updates : [];
+  const nextSteps = currentNarrative.nextSteps || {};
+  const demo = currentNarrative.demo || {};
+  const openingTitle = currentNarrative.openingTitle || "Opening Remarks";
+  const openingSubtitle = currentNarrative.openingSubtitle || "";
+  const summaryText = currentNarrative.summary || defaultSummaryText(result);
+  const nextTitle = nextSteps.title || `${nextLabel} focus`;
+  const nextBullets = Array.isArray(nextSteps.bullets) ? nextSteps.bullets.join("\n") : "";
+  const demoNote = demo.note || "";
+  const backLinkHref =
+    backHref || `/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}`;
   const warningHtml = filterContributorWarnings([draft.nextWorkItems.warning, ...(result.warnings || [])], metrics.contributors)
     .map((warning) => `<li>${escapeHtml(warning)}</li>`)
     .join("");
@@ -990,10 +1301,10 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
       <section class="ado-admin-header builder-header">
         <div>
           <div class="eyebrow">Sprint Review Builder</div>
-          <h1>Curate the report before SprintGen packages it.</h1>
+          <h1>Curate the review before Scrum Studio packages it.</h1>
           <p class="lede">ADO is supplying the metrics and story wording. You add the human context: what mattered, why it mattered, and what comes next.</p>
         </div>
-        ${inline ? "" : `<a class="secondary-button" href="/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}">Back to selections</a>`}
+        ${inline ? "" : `<a class="secondary-button" href="${escapeHtml(backLinkHref)}">${escapeHtml(backLabel)}</a>`}
       </section>
 
       ${warningHtml ? `<div class="alert alert-warn builder-warning"><strong>Review note:</strong><ul>${warningHtml}</ul></div>` : ""}
@@ -1011,7 +1322,7 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
         </div>
       </section>
 
-      <form class="story-builder-form" action="/ado-admin/generate-report" method="post">
+      <form class="story-builder-form" action="${escapeHtml(action)}" method="post">
         <input type="hidden" name="team" value="${escapeHtml(result.team)}">
         <input type="hidden" name="sprint" value="${escapeHtml(result.iteration.path)}">
         <input type="hidden" name="areaPath" value="${escapeHtml(result.areaPath || "")}">
@@ -1027,16 +1338,16 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
           <div class="opening-copy-grid">
             <label class="field-group" for="openingTitle">
               <span>Opening slide title</span>
-              <input class="text-input" id="openingTitle" name="openingTitle" type="text" value="Opening Remarks" placeholder="Example: Opening Remarks">
+              <input class="text-input" id="openingTitle" name="openingTitle" type="text" value="${escapeHtml(openingTitle)}" placeholder="Example: Opening Remarks">
             </label>
             <label class="field-group" for="openingSubtitle">
               <span>Opening slide subtitle</span>
-              <input class="text-input" id="openingSubtitle" name="openingSubtitle" type="text" placeholder="Example: by Product Owner name">
+              <input class="text-input" id="openingSubtitle" name="openingSubtitle" type="text" value="${escapeHtml(openingSubtitle)}" placeholder="Example: by Product Owner name">
             </label>
           </div>
           <label class="field-group" for="summary">
             <span>Sprint summary</span>
-            <textarea class="text-input narrative-textarea" id="summary" name="summary" rows="5">${escapeHtml(defaultSummaryText(result))}</textarea>
+            <textarea class="text-input narrative-textarea" id="summary" name="summary" rows="5">${escapeHtml(summaryText)}</textarea>
           </label>
         </section>
 
@@ -1051,37 +1362,40 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
 
           <div class="delivery-editor-grid">
             ${[0, 1, 2]
-              .map(
-                (index) => `
+              .map((index) => {
+                const update = narrativeUpdates[index] || {};
+                const updateBullets = Array.isArray(update.bullets) ? update.bullets.join("\n") : "";
+                return `
                   <article class="delivery-editor-card">
                     <div class="delivery-card-topline">
                       <span>Update ${index + 1}</span>
                       <label class="priority-check">
-                        <input type="checkbox" name="updatePriority${index}" value="yes">
+                        <input type="checkbox" name="updatePriority${index}" value="yes"${update.priority ? " checked" : ""}>
                         <span>#1 priority</span>
                       </label>
                     </div>
                     <label class="field-group" for="updateTitle${index}">
                       <span>Title</span>
-                      <input class="text-input" id="updateTitle${index}" name="updateTitle${index}" type="text" placeholder="Example: Enrollment workflow is ready for demo">
+                      <input class="text-input" id="updateTitle${index}" name="updateTitle${index}" type="text" value="${escapeHtml(update.title || "")}" placeholder="Example: Enrollment workflow is ready for demo">
                     </label>
                     <label class="field-group" for="updateBullets${index}">
                       <span>Bullet points</span>
-                      <textarea class="text-input narrative-textarea" id="updateBullets${index}" name="updateBullets${index}" rows="4" placeholder="One bullet per line"></textarea>
+                      <textarea class="text-input narrative-textarea" id="updateBullets${index}" name="updateBullets${index}" rows="4" placeholder="One bullet per line">${escapeHtml(updateBullets)}</textarea>
                     </label>
                     <label class="field-group" for="updateBusinessValue${index}">
                       <span>Business value</span>
-                      <textarea class="text-input narrative-textarea" id="updateBusinessValue${index}" name="updateBusinessValue${index}" rows="3" placeholder="Why this mattered for users, stakeholders, or operations"></textarea>
+                      <textarea class="text-input narrative-textarea" id="updateBusinessValue${index}" name="updateBusinessValue${index}" rows="3" placeholder="Why this mattered for users, stakeholders, or operations">${escapeHtml(update.businessValue || "")}</textarea>
                     </label>
                     ${renderStoryPicker({
                       title: "Attach selected sprint ADO stories",
                       name: `updateStoryIds${index}`,
                       items: draft.currentItems,
-                      emptyText: "No stories or bugs were found for this sprint."
+                      emptyText: "No stories or bugs were found for this sprint.",
+                      selectedIds: storyIdsFromSelection(update.stories)
                     })}
                   </article>
-                `
-              )
+                `;
+              })
               .join("")}
           </div>
         </section>
@@ -1092,12 +1406,12 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
               <span>Live demo handoff</span>
               <h2>Add a presentation pause for a live demo</h2>
             </div>
-            <small>If the sprint review includes a live demo, SprintGen will add a dedicated handoff slide before Looking Ahead.</small>
+            <small>If the sprint review includes a live demo, Scrum Studio will add a dedicated handoff slide before Looking Ahead.</small>
           </div>
 
           <div class="demo-toggle-panel">
             <label class="demo-check">
-              <input type="checkbox" name="hasDemo" value="yes">
+              <input type="checkbox" name="hasDemo" value="yes"${demo.enabled ? " checked" : ""}>
               <span>
                 <strong>This review includes a live demo</strong>
                 <small>Add a clean Live Demo slide to pause the recap.</small>
@@ -1105,7 +1419,7 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
             </label>
             <label class="field-group" for="demoNote">
               <span>Optional internal demo note</span>
-              <textarea class="text-input narrative-textarea" id="demoNote" name="demoNote" rows="3" placeholder="Example: Product owner will demo the workflow."></textarea>
+              <textarea class="text-input narrative-textarea" id="demoNote" name="demoNote" rows="3" placeholder="Example: Product owner will demo the workflow.">${escapeHtml(demoNote)}</textarea>
             </label>
           </div>
         </section>
@@ -1116,25 +1430,26 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
               <span>Looking ahead</span>
               <h2>Pick the next sprint work worth previewing</h2>
             </div>
-            <small>${draft.nextIteration ? `${escapeHtml(draft.nextIteration.path)}` : "SprintGen could not find the next team iteration automatically."}</small>
+            <small>${draft.nextIteration ? `${escapeHtml(draft.nextIteration.path)}` : "Scrum Studio could not find the next team iteration automatically."}</small>
           </div>
 
           <div class="next-editor-grid">
             <div class="next-editor-copy">
               <label class="field-group" for="nextTitle">
                 <span>Next steps title</span>
-                <input class="text-input" id="nextTitle" name="nextTitle" type="text" value="${escapeHtml(nextLabel)} focus" placeholder="Example: What we are lining up next">
+                <input class="text-input" id="nextTitle" name="nextTitle" type="text" value="${escapeHtml(nextTitle)}" placeholder="Example: What we are lining up next">
               </label>
               <label class="field-group" for="nextBullets">
                 <span>Next steps bullets</span>
-                <textarea class="text-input narrative-textarea" id="nextBullets" name="nextBullets" rows="5" placeholder="One bullet per line"></textarea>
+                <textarea class="text-input narrative-textarea" id="nextBullets" name="nextBullets" rows="5" placeholder="One bullet per line">${escapeHtml(nextBullets)}</textarea>
               </label>
             </div>
             ${renderStoryPicker({
               title: "Attach next sprint ADO stories",
               name: "nextStoryIds",
               items: draft.nextWorkItems.items,
-              emptyText: "No next sprint stories were found or the next iteration is not configured for this team."
+              emptyText: "No next sprint stories were found or the next iteration is not configured for this team.",
+              selectedIds: storyIdsFromSelection(nextSteps.stories)
             })}
           </div>
         </section>
@@ -1142,10 +1457,10 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
         <section class="builder-submit-panel">
           <div>
             <span>Ready</span>
-            <strong>Generate the HTML report and Presentation Mode from this curated review.</strong>
-            <small>The PAT remains in memory only. The generated job stores ADO facts and your approved narrative, not the PAT.</small>
+            <strong>${savedMode ? "Update the saved HTML report and Presentation Mode from this review." : "Generate the HTML report and Presentation Mode from this curated review."}</strong>
+            <small>${savedMode ? "This uses the saved ADO snapshot. A PAT is only needed if you explicitly refresh ADO facts." : "The PAT remains in memory only. The generated job stores ADO facts and your approved narrative, not the PAT."}</small>
           </div>
-          <button class="primary-button" type="submit">Generate Report</button>
+          <button class="primary-button" type="submit">${escapeHtml(submitLabel)}</button>
         </section>
       </form>
 
@@ -1173,11 +1488,29 @@ function renderAdoReviewBuilderContent({ draft, error = null, inline = false } =
     `;
 }
 
-function renderAdoReviewBuilderPage({ draft, error = null } = {}) {
+function renderAdoReviewBuilderPage({
+  draft,
+  error = null,
+  narrative = null,
+  action = "/ado-admin/generate-report",
+  submitLabel = "Generate Report",
+  backHref = "",
+  backLabel = "Back to selections",
+  savedMode = false
+} = {}) {
   return renderPage({
-    title: "SprintGen - Build Sprint Review",
+    title: "Scrum Studio - Build Sprint Review",
     bodyClass: "ado-page builder-page",
-    content: renderAdoReviewBuilderContent({ draft, error })
+    content: renderAdoReviewBuilderContent({
+      draft,
+      error,
+      narrative,
+      action,
+      submitLabel,
+      backHref,
+      backLabel,
+      savedMode
+    })
   });
 }
 
@@ -1199,7 +1532,7 @@ function renderAdoDeliveryUpdates(updates) {
               ${renderBulletList(update.bullets, "No bullet points were added for this update.")}
               ${
                 update.businessValue
-                  ? `<div class="business-value-box"><span>Stakeholder value</span><p>${escapeHtml(update.businessValue)}</p></div>`
+                  ? `<div class="business-value-box"><span>Business value</span><p>${escapeHtml(update.businessValue)}</p></div>`
                   : ""
               }
               ${
@@ -1984,6 +2317,7 @@ function renderAdoReportHtml(report) {
 function renderAdoReportResultPage({ jobId, report }) {
   const result = report.result || report;
   const metrics = result.metrics || {};
+  const savedReviewId = report.savedReviewId || "";
   const warnings = filterContributorWarnings(result.warnings || [], metrics.contributors);
   const warningHtml =
     warnings.length > 0
@@ -1992,7 +2326,7 @@ function renderAdoReportResultPage({ jobId, report }) {
           .join("")}</ul></div>`
       : "";
   return renderPage({
-    title: "SprintGen - Review Ready",
+    title: "Scrum Studio - Review Ready",
     bodyClass: "result-page ado-page",
     content: `
       <section class="result-card ado-report-ready-card">
@@ -2003,6 +2337,8 @@ function renderAdoReportResultPage({ jobId, report }) {
         <div class="result-actions">
           <a class="primary-button" href="/download-html/${encodeURIComponent(jobId)}">Download HTML</a>
           <a class="secondary-button strong" href="/preview/${encodeURIComponent(jobId)}" target="_blank" rel="noreferrer">Open HTML report</a>
+          ${savedReviewId ? `<a class="secondary-button" href="/reviews/${encodeURIComponent(savedReviewId)}/edit">Edit saved review</a>` : ""}
+          ${savedReviewId ? `<a class="ghost-button" href="/reviews">Saved reviews</a>` : ""}
           <a class="ghost-button" href="/ado-admin">Build another review</a>
         </div>
         <div class="present-launch">
@@ -2015,6 +2351,166 @@ function renderAdoReportResultPage({ jobId, report }) {
             <a class="secondary-button strong" href="/ado-present/${encodeURIComponent(jobId)}?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
           </div>
         </div>
+      </section>
+    `
+  });
+}
+
+function renderSavedReviewsPage({ reviews = [] } = {}) {
+  const reviewCards =
+    reviews.length > 0
+      ? `<div class="saved-review-grid">
+          ${reviews
+            .map((review) => {
+              const result = review.result || {};
+              const iteration = result.iteration || {};
+              const totals = (result.metrics && result.metrics.totals) || {};
+              const reviewId = review.id || "";
+
+              return `
+                <article class="saved-review-card">
+                  <div>
+                    <span>${escapeHtml(formatDateOnly(iteration.startDate))} to ${escapeHtml(formatDateOnly(iteration.finishDate))}</span>
+                    <h2>${escapeHtml(iteration.name || review.sprintName || "Saved sprint review")}</h2>
+                    <p>${escapeHtml(result.team || review.team || "Team not available")}</p>
+                  </div>
+                  <div class="saved-review-stats">
+                    <div><span>Completed</span><strong>${escapeHtml(formatNumber(totals.completedItems || 0))}</strong></div>
+                    <div><span>Points</span><strong>${escapeHtml(formatNumber(totals.deliveredStoryPoints || 0))}</strong></div>
+                    <div><span>Updated</span><strong>${escapeHtml(formatSavedTimestamp(review.updatedAt || review.createdAt))}</strong></div>
+                  </div>
+                  <div class="saved-review-actions">
+                    <a class="primary-button" href="/reviews/${encodeURIComponent(reviewId)}">Open</a>
+                    <a class="secondary-button" href="/reviews/${encodeURIComponent(reviewId)}/edit">Edit wording</a>
+                    <a class="ghost-button" href="/reviews/${encodeURIComponent(reviewId)}/present?vibe=prismatic" target="_blank" rel="noreferrer">Present</a>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")}
+        </div>`
+      : `<section class="result-card saved-empty-card">
+          <div class="success-orb calm">save</div>
+          <div class="eyebrow">Saved Reviews</div>
+          <h1>No saved reviews yet.</h1>
+          <p class="lede">Generate a sprint review from the builder and Scrum Studio will save an editable local copy here.</p>
+          <div class="result-actions">
+            <a class="primary-button" href="/ado-admin">Open Review Builder</a>
+          </div>
+        </section>`;
+
+  return renderPage({
+    title: "Scrum Studio - Saved Reviews",
+    bodyClass: "ado-page saved-reviews-page",
+    content: `
+      <div class="studio-return-row">
+        <a class="ghost-button" href="/">Home</a>
+        <a class="ghost-button" href="/ado-admin">Review Builder</a>
+      </div>
+      <section class="review-flow-heading saved-library-heading">
+        <div>
+          <div class="eyebrow">Review Library</div>
+          <h1>Saved sprint reviews</h1>
+          <p class="lede">Reopen a generated review, adjust wording or story grouping, and regenerate the local HTML report and Presentation Mode without re-entering a PAT.</p>
+        </div>
+      </section>
+      ${reviewCards}
+    `
+  });
+}
+
+function renderSavedReviewReadyPage({ review }) {
+  const result = review.result || {};
+  const iteration = result.iteration || {};
+  const metrics = result.metrics || {};
+  const warnings = filterContributorWarnings(result.warnings || [], metrics.contributors);
+  const warningHtml =
+    warnings.length > 0
+      ? `<div class="alert alert-warn"><strong>Review note:</strong><ul>${warnings
+          .map((warning) => `<li>${escapeHtml(warning)}</li>`)
+          .join("")}</ul></div>`
+      : "";
+
+  return renderPage({
+    title: "Scrum Studio - Saved Review",
+    bodyClass: "result-page ado-page",
+    content: `
+      <section class="result-card ado-report-ready-card">
+        <div class="success-orb">saved</div>
+        <div class="eyebrow">Saved Review</div>
+        <h1>${escapeHtml(iteration.name || review.sprintName || "This review")} is ready to reuse.</h1>
+        <p class="lede">This durable local copy uses the saved ADO snapshot and approved narrative. Edit wording any time, or refresh ADO facts with a one-time PAT.</p>
+        ${warningHtml}
+        <div class="result-actions">
+          <a class="primary-button" href="/reviews/${encodeURIComponent(review.id)}/download-html">Download HTML</a>
+          <a class="secondary-button strong" href="/reviews/${encodeURIComponent(review.id)}/preview" target="_blank" rel="noreferrer">Open HTML report</a>
+          <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/edit">Edit wording</a>
+          <a class="ghost-button" href="/reviews">Saved reviews</a>
+        </div>
+        <div class="present-launch">
+          <span>Presentation Mode</span>
+          <p>These links are durable while this saved review remains on the machine.</p>
+          <strong>Select a mode:</strong>
+          <div class="present-launch-actions">
+            <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=light" target="_blank" rel="noreferrer">Light</a>
+            <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=dark" target="_blank" rel="noreferrer">Dark</a>
+            <a class="secondary-button strong" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
+          </div>
+        </div>
+        <div class="mini-summary">
+          <div><span>Team</span><strong>${escapeHtml(result.team || review.team || "Not available")}</strong></div>
+          <div><span>Dates</span><strong>${escapeHtml(formatDateOnly(iteration.startDate))} to ${escapeHtml(formatDateOnly(iteration.finishDate))}</strong></div>
+          <div><span>Updated</span><strong>${escapeHtml(formatSavedTimestamp(review.updatedAt || review.createdAt))}</strong></div>
+        </div>
+      </section>
+    `
+  });
+}
+
+function renderSavedReviewEditPage({ review, error = null, notice = "" } = {}) {
+  const draft = buildDraftFromSavedReview(review);
+  const errorHtml = error
+    ? `<div class="alert alert-error"><strong>Saved review:</strong> ${escapeHtml(error.message || error)}${
+        error.detail ? `<small>${escapeHtml(error.detail)}</small>` : ""
+      }</div>`
+    : "";
+  const noticeHtml = notice
+    ? `<div class="alert alert-good"><strong>Updated.</strong> ${escapeHtml(notice)}</div>`
+    : "";
+
+  return renderPage({
+    title: "Scrum Studio - Edit Saved Review",
+    bodyClass: "ado-page builder-page",
+    content: `
+      <div class="studio-return-row">
+        <a class="ghost-button" href="/">Home</a>
+        <a class="ghost-button" href="/reviews">Saved reviews</a>
+        <a class="ghost-button" href="/reviews/${encodeURIComponent(review.id)}">Review ready</a>
+      </div>
+      ${errorHtml}
+      ${noticeHtml}
+      ${renderAdoReviewBuilderContent({
+        draft,
+        narrative: review.narrative || {},
+        action: `/reviews/${encodeURIComponent(review.id)}/update`,
+        submitLabel: "Update Saved Review",
+        backHref: `/reviews/${encodeURIComponent(review.id)}`,
+        backLabel: "Back to saved review",
+        savedMode: true
+      })}
+      <section class="ado-form-card saved-refresh-card">
+        <div class="form-heading">
+          <span>Optional refresh</span>
+          <strong>Refresh ADO facts with a one-time PAT</strong>
+        </div>
+        <p class="saved-refresh-copy">Use this only when you want the saved snapshot to pull current Azure DevOps facts again. The PAT is used for this request and is not written to disk.</p>
+        <form action="/reviews/${encodeURIComponent(review.id)}/refresh" method="post" autocomplete="off">
+          <label class="field-group" for="pat">
+            <span>Azure DevOps PAT</span>
+            <input class="text-input" id="pat" name="pat" type="password" required placeholder="Paste PAT for refresh only" autocomplete="off">
+          </label>
+          <button class="secondary-button strong" type="submit">Refresh ADO snapshot</button>
+        </form>
       </section>
     `
   });
@@ -2112,7 +2608,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
             ? `<section class="data-preview compact">
                 <div>
                   <span>Sample work items</span>
-                  <h2>Stories SprintGen can read next</h2>
+                  <h2>Stories Scrum Studio can read next</h2>
                 </div>
                 ${renderAdoWorkItems(result.workItems.items)}
               </section>`
@@ -2123,17 +2619,17 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
     : "";
 
   return renderPage({
-    title: "SprintGen - ADO Feasibility Test",
+    title: "Scrum Studio - ADO Feasibility Test",
     bodyClass: "ado-page",
     content: `
       <section class="ado-hero">
         <div class="ado-copy">
           <div class="eyebrow">Phase 1 data lab</div>
-          <h1>Check whether SprintGen can read your sprint facts.</h1>
+          <h1>Check whether Scrum Studio can read your sprint facts.</h1>
           <p class="lede">Use a short-lived Azure DevOps PAT to test team iterations, Analytics metadata, WorkItemSnapshot burndown rows, and current sprint work items.</p>
           <div class="ado-northstar">
             <strong>North Star</strong>
-            <p>ADO provides facts. SprintGen calculates metrics. The scrum master edits and approves the final story.</p>
+            <p>ADO provides facts. Scrum Studio calculates metrics. The scrum master edits and approves the final story.</p>
           </div>
         </div>
 
@@ -2146,7 +2642,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
           <label class="field-group" for="pat">
             <span>Azure DevOps PAT</span>
             <input class="text-input" id="pat" name="pat" type="password" required placeholder="Paste PAT for this test only" autocomplete="off">
-            <small>The token is used only for this request. SprintGen does not save it.</small>
+            <small>The token is used only for this request. Scrum Studio does not save it.</small>
           </label>
           <label class="field-group" for="team">
             <span>Team</span>
@@ -2158,7 +2654,7 @@ function renderAdoTestPage({ values = {}, result = null, error = null } = {}) {
             <small>Enter a sprint number like 37, or paste the full iteration path.</small>
           </label>
           <button class="primary-button" type="submit">Run feasibility test</button>
-          <a class="ghost-button full-width" href="/">Back to SprintGen</a>
+          <a class="ghost-button full-width" href="/">Back Home</a>
         </form>
       </section>
       ${resultHtml}
@@ -2214,7 +2710,7 @@ function renderAdoStatusSummary(result) {
       <section class="insight-section">
         <div>
           <span>Stories to review</span>
-          <h2>Completed work SprintGen can summarize next</h2>
+          <h2>Completed work Scrum Studio can summarize next</h2>
         </div>
         <div class="story-list-grid completed-only">
           ${renderMetricStoryList(
@@ -2287,7 +2783,7 @@ function renderAdoStatusSummary(result) {
           ? `<section class="data-preview compact">
               <div>
                 <span>Sample work items</span>
-                <h2>Stories SprintGen can read next</h2>
+                <h2>Stories Scrum Studio can read next</h2>
               </div>
               ${renderAdoWorkItems(result.workItems.items)}
             </section>`
@@ -2380,12 +2876,16 @@ function renderAdoAdminConnectPage({ error = null } = {}) {
     : "";
 
   return renderPage({
-    title: "SprintGen - Start Review",
+    title: "Scrum Studio - Start Review",
     bodyClass: "ado-page guided-page",
     content: `
+      <div class="studio-return-row">
+        <a class="ghost-button" href="/">Home</a>
+        <a class="ghost-button" href="/reviews">Saved reviews</a>
+      </div>
       <section class="ado-hero guided-auth">
         <div class="ado-copy">
-          <div class="eyebrow">SprintGen</div>
+          <div class="eyebrow">Review Builder</div>
           <h1>Start your sprint review</h1>
           <p class="lede">Use a temporary Azure DevOps PAT, then choose the sprint you want to turn into a polished review.</p>
           <div class="ado-northstar">
@@ -2422,7 +2922,7 @@ function renderAdoAdminPage({
   error = null
 } = {}) {
   const errorHtml = error
-    ? `<div class="alert alert-error"><strong>SprintGen note:</strong> ${escapeHtml(error.message)}${
+      ? `<div class="alert alert-error"><strong>Review Builder note:</strong> ${escapeHtml(error.message)}${
         error.detail ? `<small>${escapeHtml(error.detail)}</small>` : ""
       }</div>`
     : "";
@@ -2437,19 +2937,23 @@ function renderAdoAdminPage({
     : null;
 
   return renderPage({
-    title: "SprintGen - Choose Review",
+    title: "Scrum Studio - Choose Review",
     bodyClass: "ado-page guided-page",
     content: `
       <section class="review-flow-shell">
         <div class="review-flow-heading">
           <div>
-            <div class="eyebrow">SprintGen</div>
+            <div class="eyebrow">Review Builder</div>
             <h1>Choose your review</h1>
-            <p class="lede">Pick the team and sprint. SprintGen will pull the facts and open the builder.</p>
+            <p class="lede">Pick the team and sprint. Scrum Studio will pull the facts and open the builder.</p>
           </div>
-          <form action="/ado-admin/disconnect" method="post">
-            <button class="ghost-button" type="submit">Disconnect</button>
-          </form>
+          <div class="review-flow-actions">
+            <a class="ghost-button" href="/">Home</a>
+            <a class="ghost-button" href="/reviews">Saved reviews</a>
+            <form action="/ado-admin/disconnect" method="post">
+              <button class="ghost-button" type="submit">Disconnect</button>
+            </form>
+          </div>
         </div>
 
         <form class="review-flow-card" action="/ado-admin/review" method="post" data-review-flow>
@@ -2494,7 +2998,7 @@ function renderAdoAdminPage({
               <span class="flow-step-number">3</span>
               <div>
                 <strong>Review builder</strong>
-                <p data-build-copy>Choose sprint and work area. SprintGen will load the builder below.</p>
+                <p data-build-copy>Choose sprint and work area. Scrum Studio will load the builder below.</p>
               </div>
             </div>
           </div>
@@ -2556,8 +3060,8 @@ function renderAdoAdminPage({
             var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
             if (buildCopy) {
               buildCopy.textContent = ready
-                ? "SprintGen is loading the review builder below."
-                : "Choose sprint and work area. SprintGen will load the builder below.";
+                ? "Scrum Studio is loading the review builder below."
+                : "Choose sprint and work area. Scrum Studio will load the builder below.";
             }
           }
 
@@ -2992,16 +3496,16 @@ function renderAdoPresentationPage(report, vibeInput) {
 
 function renderErrorPage(error) {
   return renderPage({
-    title: "SprintGen - Needs Attention",
+    title: "Scrum Studio - Needs Attention",
     bodyClass: "error-page",
     content: `
       <section class="result-card error-card">
         <div class="success-orb calm">fix</div>
-        <div class="eyebrow">SprintGen needs a tweak</div>
+        <div class="eyebrow">Scrum Studio needs a tweak</div>
         <h1>We could not generate that report yet.</h1>
         <p class="lede">${escapeHtml(error.message || error)}</p>
         <div class="result-actions">
-          <a class="primary-button" href="/">Back to SprintGen</a>
+          <a class="primary-button" href="/">Back Home</a>
           <a class="ghost-button" href="/template">Sample workbook</a>
         </div>
       </section>
@@ -3156,15 +3660,194 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
   };
 }
 
-app.use("/assets", express.static(path.join(projectRoot, "public"), { maxAge: 0 }));
-app.use(express.urlencoded({ extended: false, limit: "1mb" }));
-
-app.get("/", (req, res) => {
-  if (getAdoSession(req)) {
-    res.redirect(303, "/ado-admin");
+function sendLobbyApp(req, res) {
+  if (!fs.existsSync(lobbyIndexPath)) {
+    res.status(503).send(
+      renderErrorPage("The Lobby app has not been built yet. Run npm --prefix apps/lobby install, then npm --prefix apps/lobby run build.")
+    );
     return;
   }
 
+  res.sendFile(lobbyIndexPath);
+}
+
+const usStateNames = {
+  AL: "Alabama",
+  AK: "Alaska",
+  AZ: "Arizona",
+  AR: "Arkansas",
+  CA: "California",
+  CO: "Colorado",
+  CT: "Connecticut",
+  DE: "Delaware",
+  FL: "Florida",
+  GA: "Georgia",
+  HI: "Hawaii",
+  ID: "Idaho",
+  IL: "Illinois",
+  IN: "Indiana",
+  IA: "Iowa",
+  KS: "Kansas",
+  KY: "Kentucky",
+  LA: "Louisiana",
+  ME: "Maine",
+  MD: "Maryland",
+  MA: "Massachusetts",
+  MI: "Michigan",
+  MN: "Minnesota",
+  MS: "Mississippi",
+  MO: "Missouri",
+  MT: "Montana",
+  NE: "Nebraska",
+  NV: "Nevada",
+  NH: "New Hampshire",
+  NJ: "New Jersey",
+  NM: "New Mexico",
+  NY: "New York",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  OH: "Ohio",
+  OK: "Oklahoma",
+  OR: "Oregon",
+  PA: "Pennsylvania",
+  RI: "Rhode Island",
+  SC: "South Carolina",
+  SD: "South Dakota",
+  TN: "Tennessee",
+  TX: "Texas",
+  UT: "Utah",
+  VT: "Vermont",
+  VA: "Virginia",
+  WA: "Washington",
+  WV: "West Virginia",
+  WI: "Wisconsin",
+  WY: "Wyoming",
+  DC: "District of Columbia"
+};
+
+function parseWeatherLocation(value) {
+  const raw = String(value || "").trim();
+  const parts = raw.split(",").map((part) => part.trim()).filter(Boolean);
+  const stateToken = parts.length > 1 ? parts[1].split(/\s+/)[0].toUpperCase() : "";
+
+  return {
+    raw,
+    query: parts[0] || raw,
+    stateName: usStateNames[stateToken] || parts[1] || ""
+  };
+}
+
+function selectOpenMeteoLocation(results, stateName) {
+  const locations = Array.isArray(results) ? results : [];
+  const wantedState = String(stateName || "").toLowerCase();
+
+  if (wantedState) {
+    const exactState = locations.find(
+      (location) => String(location.admin1 || "").toLowerCase() === wantedState
+    );
+
+    if (exactState) {
+      return exactState;
+    }
+
+    const looseState = locations.find((location) =>
+      String(location.admin1 || "").toLowerCase().includes(wantedState)
+    );
+
+    if (looseState) {
+      return looseState;
+    }
+  }
+
+  return locations.find((location) => location.country_code === "US") || locations[0] || null;
+}
+
+function getWeatherConditionText(code) {
+  const weatherCode = Number(code);
+
+  if (weatherCode === 0) return "Clear";
+  if ([1, 2].includes(weatherCode)) return "Partly cloudy";
+  if (weatherCode === 3) return "Overcast";
+  if ([45, 48].includes(weatherCode)) return "Fog";
+  if ([51, 53, 55, 56, 57].includes(weatherCode)) return "Drizzle";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(weatherCode)) return "Rain";
+  if ([71, 73, 75, 77, 85, 86].includes(weatherCode)) return "Snow";
+  if ([95, 96, 99].includes(weatherCode)) return "Thunderstorm";
+
+  return "Cloudy";
+}
+
+app.use("/assets", express.static(path.join(projectRoot, "public"), { maxAge: 0 }));
+if (fs.existsSync(lobbyDistDir)) {
+  app.use("/lobby", express.static(lobbyDistDir, { maxAge: 0 }));
+}
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+app.get("/api/weather", async (req, res) => {
+  const location = parseWeatherLocation(req.query.location);
+
+  if (!location.raw) {
+    res.status(400).json({ error: "Missing location" });
+    return;
+  }
+
+  try {
+    const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+      location.query
+    )}&count=10&language=en&format=json`;
+    const geocodeResponse = await fetch(geocodeUrl);
+
+    if (!geocodeResponse.ok) {
+      res.status(502).json({ error: `Open-Meteo geocoding error (${geocodeResponse.status})` });
+      return;
+    }
+
+    const geocodeJson = await geocodeResponse.json();
+    const matchedLocation = selectOpenMeteoLocation(geocodeJson.results, location.stateName);
+
+    if (!matchedLocation) {
+      res.status(404).json({ error: "Weather location not found" });
+      return;
+    }
+
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(
+      matchedLocation.latitude
+    )}&longitude=${encodeURIComponent(
+      matchedLocation.longitude
+    )}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`;
+    const forecastResponse = await fetch(forecastUrl);
+
+    if (!forecastResponse.ok) {
+      res.status(502).json({ error: `Open-Meteo forecast error (${forecastResponse.status})` });
+      return;
+    }
+
+    const forecastJson = await forecastResponse.json();
+    const current = forecastJson.current || {};
+    const daily = forecastJson.daily || {};
+    const weatherCode = Number(current.weather_code);
+
+    res.json({
+      city: matchedLocation.name || "",
+      region: matchedLocation.admin1 || matchedLocation.country || "",
+      tempF: Math.round(Number(current.temperature_2m) || 0),
+      conditionText: getWeatherConditionText(weatherCode),
+      weatherCode,
+      isDay: current.is_day === 1,
+      highF: Math.round(Number(daily.temperature_2m_max && daily.temperature_2m_max[0]) || 0),
+      lowF: Math.round(Number(daily.temperature_2m_min && daily.temperature_2m_min[0]) || 0),
+      localTime: current.time || "",
+      lastUpdated: current.time || ""
+    });
+  } catch (error) {
+    console.error("Weather fetch failed", error);
+    res.status(502).json({ error: "Weather unavailable" });
+  }
+});
+
+app.get(["/lobby", "/lobby/", "/lobby/run", "/lobby/run/"], sendLobbyApp);
+
+app.get("/", (req, res) => {
   res.send(renderHomePage());
 });
 
@@ -3205,6 +3888,176 @@ app.post("/ado-test", async (req, res) => {
         error: formattedError
       })
     );
+  }
+});
+
+app.get("/reviews", (req, res) => {
+  try {
+    res.send(renderSavedReviewsPage({ reviews: listSavedReviews() }));
+  } catch (error) {
+    res.status(500).send(renderErrorPage(error));
+  }
+});
+
+app.get("/reviews/:id/edit", (req, res) => {
+  try {
+    const review = readSavedReview(req.params.id);
+    const notice =
+      req.query.refreshed === "1"
+        ? "ADO facts were refreshed from the saved team and sprint. Existing narrative was preserved where matching story IDs still exist."
+        : "";
+
+    res.send(renderSavedReviewEditPage({ review, notice }));
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.post("/reviews/:id/update", async (req, res) => {
+  try {
+    const review = readSavedReview(req.params.id);
+    const draft = buildDraftFromSavedReview(review);
+    const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items);
+
+    if (!narrative.summary) {
+      narrative.summary = defaultSummaryText(draft.result);
+    }
+
+    const updatedReview = createSavedReviewFromReport(
+      {
+        ...review,
+        generatedAt: new Date().toISOString().slice(0, 10),
+        result: draft.result,
+        nextIteration: draft.nextIteration,
+        nextWorkItems: draft.nextWorkItems,
+        narrative
+      },
+      review
+    );
+
+    await writeSavedReviewArtifacts(updatedReview);
+    res.redirect(303, `/reviews/${encodeURIComponent(review.id)}`);
+  } catch (error) {
+    try {
+      const review = readSavedReview(req.params.id);
+      res.status(400).send(renderSavedReviewEditPage({ review, error }));
+    } catch (readError) {
+      res.status(404).send(renderErrorPage(readError));
+    }
+  }
+});
+
+app.post("/reviews/:id/refresh", async (req, res) => {
+  let review = null;
+
+  try {
+    review = readSavedReview(req.params.id);
+    const pat = String(req.body.pat || "").trim();
+    const result = review.result || {};
+    const iteration = result.iteration || {};
+    const team = review.team || result.team || "";
+    const sprint = review.sprintPath || iteration.path || iteration.name || "";
+    const areaPath = review.areaPath || result.areaPath || "";
+
+    if (!pat) {
+      throw {
+        status: 400,
+        message: "Paste a PAT to refresh ADO facts for this saved review."
+      };
+    }
+
+    if (!team || !sprint) {
+      throw {
+        status: 400,
+        message: "This saved review is missing the team or sprint path needed to refresh ADO facts."
+      };
+    }
+
+    const draft = await buildAdoReviewDraft({
+      pat,
+      team,
+      sprint,
+      areaPath
+    });
+    const narrative = remapNarrativeStories(review.narrative || {}, draft.currentItems, draft.nextWorkItems.items);
+
+    if (!narrative.summary) {
+      narrative.summary = defaultSummaryText(draft.result);
+    }
+
+    const refreshedReview = createSavedReviewFromReport(
+      {
+        ...review,
+        generatedAt: new Date().toISOString().slice(0, 10),
+        result: draft.result,
+        nextIteration: draft.nextIteration,
+        nextWorkItems: draft.nextWorkItems,
+        narrative
+      },
+      review
+    );
+
+    await writeSavedReviewArtifacts(refreshedReview);
+    res.redirect(303, `/reviews/${encodeURIComponent(review.id)}/edit?refreshed=1`);
+  } catch (error) {
+    const formattedError = error && error.status ? formatAdoError(error) : error;
+
+    if (review) {
+      res.status((formattedError && formattedError.status) || 400).send(
+        renderSavedReviewEditPage({
+          review,
+          error: formattedError
+        })
+      );
+      return;
+    }
+
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.get("/reviews/:id/preview", (req, res) => {
+  try {
+    const review = readSavedReview(req.params.id);
+    const paths = getSavedReviewPaths(review.id);
+
+    if (!fs.existsSync(paths.htmlPath)) {
+      fs.writeFileSync(paths.htmlPath, renderAdoReportHtml(review), "utf8");
+    }
+
+    res.sendFile(paths.htmlPath);
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.get("/reviews/:id/download-html", (req, res) => {
+  try {
+    const review = readSavedReview(req.params.id);
+    const html = renderAdoReportHtml(review);
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${getSavedReviewDownloadName(review)}"`);
+    res.send(html);
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.get("/reviews/:id/present", (req, res) => {
+  try {
+    const review = readSavedReview(req.params.id);
+    res.send(renderAdoPresentationPage(review, req.query.vibe));
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
+  }
+});
+
+app.get("/reviews/:id", (req, res) => {
+  try {
+    res.send(renderSavedReviewReadyPage({ review: readSavedReview(req.params.id) }));
+  } catch (error) {
+    res.status(404).send(renderErrorPage(error));
   }
 });
 
@@ -3354,7 +4207,7 @@ async function handleAdoReviewBuilder(req, res) {
         renderAdoReviewBuilderContent({
           inline: true,
           error: {
-            message: "Your temporary SprintGen session expired. Paste the PAT again to build the sprint review."
+            message: "Your temporary Scrum Studio session expired. Paste the PAT again to build the sprint review."
           }
         })
       );
@@ -3364,7 +4217,7 @@ async function handleAdoReviewBuilder(req, res) {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary SprintGen session expired. Paste the PAT again to build the sprint review."
+          message: "Your temporary Scrum Studio session expired. Paste the PAT again to build the sprint review."
         }
       })
     );
@@ -3412,7 +4265,7 @@ app.post("/ado-admin/generate-report", createJobId, async (req, res) => {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary SprintGen session expired. Paste the PAT again to generate the ADO report."
+          message: "Your temporary Scrum Studio session expired. Paste the PAT again to generate the ADO report."
         }
       })
     );
@@ -3466,6 +4319,19 @@ app.post("/ado-admin/generate-report", createJobId, async (req, res) => {
       };
     }
 
+    const savedReview = createSavedReviewFromReport(report);
+    const savedPaths = getSavedReviewPaths(savedReview.id);
+
+    fs.mkdirSync(savedPaths.reviewDir, { recursive: true });
+    fs.writeFileSync(savedPaths.htmlPath, renderAdoReportHtml(savedReview), "utf8");
+
+    if (report.pdf.available && fs.existsSync(paths.pdfPath)) {
+      fs.copyFileSync(paths.pdfPath, savedPaths.pdfPath);
+    }
+
+    writeSavedReviewData(savedReview);
+    report.savedReviewId = savedReview.id;
+
     fs.writeFileSync(paths.adoDataPath, JSON.stringify(report, null, 2), "utf8");
     fs.writeFileSync(
       paths.metaPath,
@@ -3501,7 +4367,7 @@ app.get("/ado-report/:id", (req, res) => {
     const paths = getJobPaths(req.params.id);
 
     if (!fs.existsSync(paths.adoDataPath)) {
-      res.status(404).send(renderErrorPage("That ADO report is no longer available. Please generate it again from SprintGen."));
+      res.status(404).send(renderErrorPage("That ADO report is no longer available. Please generate it again from Scrum Studio."));
       return;
     }
 
@@ -3519,7 +4385,7 @@ app.post("/ado-admin/presentation", createJobId, async (req, res) => {
     res.status(401).send(
       renderAdoAdminConnectPage({
         error: {
-          message: "Your temporary SprintGen session expired. Paste the PAT again to create a presentation."
+          message: "Your temporary Scrum Studio session expired. Paste the PAT again to create a presentation."
         }
       })
     );
@@ -3559,7 +4425,7 @@ app.get("/ado-present/:id", (req, res) => {
     const paths = getJobPaths(req.params.id);
 
     if (!fs.existsSync(paths.adoDataPath)) {
-      res.status(404).send(renderErrorPage("That ADO presentation is no longer available. Please create it again from SprintGen."));
+      res.status(404).send(renderErrorPage("That ADO presentation is no longer available. Please create it again from Scrum Studio."));
       return;
     }
 

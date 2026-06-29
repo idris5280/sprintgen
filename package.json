@@ -6,6 +6,8 @@
   "scripts": {
     "generate": "node src/generate.js",
     "clean": "node -e \"const fs = require('fs'); fs.rmSync('output', { recursive: true, force: true }); fs.rmSync('runtime', { recursive: true, force: true }); fs.mkdirSync('output', { recursive: true });\"",
+    "build:lobby": "npm --prefix apps/lobby run build",
+    "dev:lobby": "npm --prefix apps/lobby run dev",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },
