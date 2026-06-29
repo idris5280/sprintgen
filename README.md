@@ -12,6 +12,28 @@ npm install
 
 On Windows PowerShell systems that block `npm.ps1`, use `npm.cmd install` instead.
 
+## One-Click Windows Start
+
+For Scrum Masters on Windows, copy the repo to a local folder such as:
+
+```text
+C:\Users\<name>\Documents\Scrum Studio\sprintgen
+```
+
+Then double-click:
+
+```text
+Start Scrum Studio.bat
+```
+
+The launcher checks for Node.js, installs missing dependencies, builds the Lobby assets if needed, starts the local server, and opens:
+
+```text
+http://127.0.0.1:3000/
+```
+
+Keep the server window open while using Scrum Studio. Closing that window stops the local app. After downloading a newer copy of the repo, the same launcher remains available at the repo root.
+
 ## Run The Web App Locally
 
 ```bash
