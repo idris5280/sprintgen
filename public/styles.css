@@ -1500,6 +1500,10 @@ h2 {
   border-left-color: rgba(0, 118, 192, .78);
 }
 
+.section-type-live_demo {
+  border-left-color: rgba(14, 191, 202, .82);
+}
+
 .section-editor-topline,
 .section-editor-title-row,
 .section-editor-actions {

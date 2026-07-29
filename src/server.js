@@ -470,6 +470,7 @@ function remapNarrativeStories(narrative, currentItems, nextItems) {
     ...currentNarrative,
     sections,
     updates: deliveryUpdatesFromSections(sections),
+    demo: demoFromSections(sections),
     nextSteps: nextStepsFromSections(sections),
     environmentReadiness
   };
@@ -507,7 +508,7 @@ function renderPage({ title, bodyClass = "", content }) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css?v=5">
+  <link rel="stylesheet" href="/assets/styles.css?v=6">
   <script src="/assets/review-builder.js?v=2" defer></script>
 </head>
 <body class="${escapeHtml(bodyClass)}">
@@ -1420,7 +1421,7 @@ function defaultSummaryText(result) {
 
 function normalizeSectionType(value) {
   const type = String(value || "").trim().toLowerCase();
-  return ["delivery", "screenshot", "challenge", "risk", "next_steps"].includes(type) ? type : "delivery";
+  return ["delivery", "screenshot", "challenge", "risk", "next_steps", "live_demo"].includes(type) ? type : "delivery";
 }
 
 function normalizeSectionId(value, index, type = "section") {
@@ -1496,7 +1497,8 @@ function sectionLabel(type) {
     screenshot: "Screenshot",
     challenge: "Challenge",
     risk: "Risk",
-    next_steps: "Next Steps"
+    next_steps: "Next Steps",
+    live_demo: "Live Demo"
   };
 
   return labels[normalizeSectionType(type)];
@@ -1508,7 +1510,8 @@ function sectionIcon(type) {
     screenshot: "&#128247;",
     challenge: "&#9889;",
     risk: "&#9888;",
-    next_steps: "&#8594;"
+    next_steps: "&#8594;",
+    live_demo: "&#9654;"
   };
 
   return icons[normalizeSectionType(type)];
@@ -1552,6 +1555,16 @@ function createDefaultReviewSection(type, index = 0, id = "") {
     return base;
   }
 
+  if (normalizedType === "live_demo") {
+    return {
+      ...base,
+      title: "Live Demo",
+      enabled: false,
+      presenters: [],
+      note: ""
+    };
+  }
+
   return {
     ...base,
     description: "",
@@ -1568,7 +1581,7 @@ function normalizeReviewSection(section, index = 0) {
   const type = normalizeSectionType(source.type);
   const normalized = createDefaultReviewSection(type, index, source.id);
 
-  normalized.title = String(source.title || "").trim();
+  normalized.title = String(source.title || (type === "live_demo" ? normalized.title : "")).trim();
 
   if (type === "risk") {
     normalized.description = String(source.description || "").trim();
@@ -1577,6 +1590,19 @@ function normalizeReviewSection(section, index = 0) {
     normalized.roam = normalizeRoamStatus(source.roam || source.status);
     normalized.owner = String(source.owner || "").trim();
     normalized.notes = String(source.notes || "").trim();
+    return normalized;
+  }
+
+  if (type === "live_demo") {
+    const presenters = Array.isArray(source.presenters)
+      ? source.presenters.map((presenter) => String(presenter || "").trim()).filter(Boolean)
+      : [];
+    const note = String(source.note || "").trim();
+    const customTitle = normalized.title && normalized.title.toLowerCase() !== "live demo";
+
+    normalized.enabled = Boolean(source.enabled || customTitle || presenters.length > 0 || note);
+    normalized.presenters = presenters;
+    normalized.note = note;
     return normalized;
   }
 
@@ -1619,6 +1645,15 @@ function reviewSectionHasContent(section) {
     return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.stories.length > 0);
   }
 
+  if (section.type === "live_demo") {
+    return Boolean(
+      section.enabled ||
+        (section.title && section.title.toLowerCase() !== "live demo") ||
+        (Array.isArray(section.presenters) && section.presenters.length > 0) ||
+        section.note
+    );
+  }
+
   return Boolean(section.title || section.bullets.length > 0 || section.businessValue);
 }
 
@@ -1647,6 +1682,22 @@ function normalizeNarrativeSections(narrative) {
     sections.push(legacyNextSteps);
   }
 
+  const legacyDemo = normalizeReviewSection(
+    {
+      id: "live-demo-legacy",
+      type: "live_demo",
+      enabled: currentNarrative.demo && currentNarrative.demo.enabled,
+      title: currentNarrative.demo && currentNarrative.demo.title,
+      presenters: currentNarrative.demo && currentNarrative.demo.presenters,
+      note: currentNarrative.demo && currentNarrative.demo.note
+    },
+    sections.length
+  );
+
+  if (!sections.some((section) => section.type === "live_demo") && reviewSectionHasContent(legacyDemo)) {
+    sections.push(legacyDemo);
+  }
+
   return sections;
 }
 
@@ -1654,7 +1705,11 @@ function sectionsForBuilder(narrative) {
   const sections = normalizeNarrativeSections(narrative);
   return sections.length > 0
     ? sections
-    : [createDefaultReviewSection("delivery", 0, "delivery-1"), createDefaultReviewSection("next_steps", 1, "next-steps-1")];
+    : [
+        createDefaultReviewSection("delivery", 0, "delivery-1"),
+        createDefaultReviewSection("next_steps", 1, "next-steps-1"),
+        createDefaultReviewSection("live_demo", 2, "live-demo-1")
+      ];
 }
 
 function deliveryUpdatesFromSections(sections) {
@@ -1676,6 +1731,26 @@ function nextStepsFromSections(sections) {
     title: section.title || "",
     bullets: Array.isArray(section.bullets) ? section.bullets : [],
     stories: Array.isArray(section.stories) ? section.stories : []
+  };
+}
+
+function demoFromSections(sections) {
+  const section = (sections || []).find((candidate) => candidate.type === "live_demo");
+
+  if (!section || !reviewSectionHasContent(section)) {
+    return {
+      enabled: false,
+      title: "",
+      presenters: [],
+      note: ""
+    };
+  }
+
+  return {
+    enabled: true,
+    title: section.title || "Live Demo",
+    presenters: Array.isArray(section.presenters) ? section.presenters : [],
+    note: section.note || ""
   };
 }
 
@@ -1759,6 +1834,18 @@ function parseSectionFromRequest({ body, files, id, index, currentItems, nextIte
     return section;
   }
 
+  if (type === "live_demo") {
+    section.presenters = splitNames(body[sectionFieldName("presenters", id)]);
+    section.note = String(body[sectionFieldName("note", id)] || "").trim();
+    section.enabled = Boolean(
+      body[sectionFieldName("enabled", id)] ||
+        (section.title && section.title.toLowerCase() !== "live demo") ||
+        section.presenters.length > 0 ||
+        section.note
+    );
+    return section;
+  }
+
   section.bullets = splitBullets(body[sectionFieldName("bullets", id)]);
   section.businessValue = String(body[sectionFieldName("businessValue", id)] || "").trim();
 
@@ -1830,6 +1917,24 @@ function parseReviewSections(body, currentItems, nextItems, files, previousNarra
 function parseAdoNarrative(body, currentItems, nextItems, files = [], previousNarrative = {}) {
   const sections = parseReviewSections(body, currentItems, nextItems, files, previousNarrative);
 
+  if (!sections.some((section) => section.type === "live_demo")) {
+    const legacyDemoSection = normalizeReviewSection(
+      {
+        id: "live-demo-legacy",
+        type: "live_demo",
+        enabled: Boolean(body.hasDemo),
+        title: String(body.demoTitle || "").trim(),
+        presenters: splitNames(body.demoPresenters),
+        note: String(body.demoNote || "").trim()
+      },
+      sections.length
+    );
+
+    if (reviewSectionHasContent(legacyDemoSection)) {
+      sections.push(legacyDemoSection);
+    }
+  }
+
   const sectionNextSteps = nextStepsFromSections(sections);
   const nextSteps = reviewSectionHasContent({ ...sectionNextSteps, type: "next_steps" })
     ? sectionNextSteps
@@ -1838,12 +1943,7 @@ function parseAdoNarrative(body, currentItems, nextItems, files = [], previousNa
         bullets: splitBullets(body.nextBullets),
         stories: selectStoriesById(nextItems, body.nextStoryIds)
       };
-  const demo = {
-    enabled: Boolean(body.hasDemo),
-    title: String(body.demoTitle || "").trim(),
-    presenters: splitNames(body.demoPresenters),
-    note: String(body.demoNote || "").trim()
-  };
+  const demo = demoFromSections(sections);
 
   return {
     summary: String(body.summary || "").trim(),
@@ -1921,7 +2021,8 @@ function renderSectionControls(section, index) {
     screenshot: "Show and explain a visual",
     challenge: "Capture a challenge",
     risk: "Track a ROAM risk",
-    next_steps: "Preview what comes next"
+    next_steps: "Preview what comes next",
+    live_demo: "Pause for a live demo"
   };
 
   return `
@@ -1949,7 +2050,8 @@ function renderCommonSectionFields(section) {
     screenshot: "Example: Dashboard view is ready for feedback",
     challenge: "Example: Vendor dependency slowed validation",
     risk: "Example: Integration timeline may slip",
-    next_steps: "Example: Sprint 38 focus"
+    next_steps: "Example: Sprint 38 focus",
+    live_demo: "Live Demo"
   };
 
   return `
@@ -2109,6 +2211,32 @@ function renderNextStepsSectionEditor(section, draft) {
   `;
 }
 
+function renderLiveDemoSectionEditor(section) {
+  const id = section.id;
+  const presenters = Array.isArray(section.presenters) ? section.presenters.join("\n") : "";
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <div class="demo-toggle-panel">
+      <label class="demo-check">
+        <input type="checkbox" name="${escapeHtml(sectionFieldName("enabled", id))}" value="yes"${section.enabled ? " checked" : ""}>
+        <span>
+          <strong>This review includes a live demo</strong>
+          <small>Adds a clean demo slide wherever this section sits in the review.</small>
+        </span>
+      </label>
+      <label class="field-group" for="${escapeHtml(sectionFieldName("presenters", id))}">
+        <span>Presenter names</span>
+        <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("presenters", id))}" name="${escapeHtml(sectionFieldName("presenters", id))}" rows="3" placeholder="One presenter per line">${escapeHtml(presenters)}</textarea>
+      </label>
+      <label class="field-group" for="${escapeHtml(sectionFieldName("note", id))}">
+        <span>Demo note</span>
+        <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("note", id))}" name="${escapeHtml(sectionFieldName("note", id))}" rows="3" placeholder="Example: Product owner will demo the workflow.">${escapeHtml(section.note || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
 function renderReadinessAudienceEditor({ key, label, description, checked, message, stories, items }) {
   const enabledName = key === "training" ? "readinessTrainingEnabled" : "readinessUatEnabled";
   const storyName = key === "training" ? "readinessTrainingStoryIds" : "readinessUatStoryIds";
@@ -2186,7 +2314,9 @@ function renderReviewSectionEditor(section, index, draft) {
           ? renderRiskSectionEditor(normalizedSection)
           : type === "next_steps"
             ? renderNextStepsSectionEditor(normalizedSection, draft)
-            : renderDeliverySectionEditor(normalizedSection, draft);
+            : type === "live_demo"
+              ? renderLiveDemoSectionEditor(normalizedSection)
+              : renderDeliverySectionEditor(normalizedSection, draft);
 
   return `
     <article class="delivery-editor-card review-section-card section-type-${escapeHtml(type)}" data-review-section>
@@ -2234,13 +2364,9 @@ function renderAdoReviewBuilderContent({
   const currentNarrative = narrative || {};
   const reviewSections = sectionsForBuilder(currentNarrative);
   const readiness = normalizeEnvironmentReadiness(currentNarrative);
-  const demo = currentNarrative.demo || {};
   const openingTitle = currentNarrative.openingTitle || "Opening Remarks";
   const openingSubtitle = currentNarrative.openingSubtitle || "";
   const summaryText = currentNarrative.summary || defaultSummaryText(result);
-  const demoTitle = demo.title || "Live Demo";
-  const demoPresenters = Array.isArray(demo.presenters) ? demo.presenters.join("\n") : "";
-  const demoNote = demo.note || "";
   const backLinkHref = backHref || buildAdoAdminHrefForResult(result);
   const warningHtml = filterContributorWarnings([draft.nextWorkItems.warning, ...(result.warnings || [])], metrics.contributors)
     .map((warning) => `<li>${escapeHtml(warning)}</li>`)
@@ -2306,7 +2432,7 @@ function renderAdoReviewBuilderContent({
               <span>Review sections</span>
               <h2>Build the stakeholder story section by section</h2>
             </div>
-            <small>Add delivery updates, screenshots, challenges, risks, or next steps in the order you want them presented.</small>
+            <small>Add delivery updates, screenshots, challenges, risks, next steps, or a live demo in the order you want them presented.</small>
           </div>
 
           <div class="section-add-row" aria-label="Add review section">
@@ -2315,46 +2441,13 @@ function renderAdoReviewBuilderContent({
             <button class="secondary-button" type="button" data-add-section="challenge">Challenge</button>
             <button class="secondary-button" type="button" data-add-section="risk">Risk</button>
             <button class="secondary-button" type="button" data-add-section="next_steps">Next Steps</button>
+            <button class="secondary-button" type="button" data-add-section="live_demo">Live Demo</button>
           </div>
 
           <div class="delivery-editor-grid review-section-list" data-section-list>
             ${reviewSections.map((section, index) => renderReviewSectionEditor(section, index, draft)).join("")}
           </div>
-          ${["delivery", "screenshot", "challenge", "risk", "next_steps"].map((type) => renderReviewSectionTemplate(type, draft)).join("")}
-        </section>
-
-        <section class="narrative-section demo-builder-section">
-          <div class="section-heading-row">
-            <div>
-              <span>Live demo handoff</span>
-              <h2>Add a presentation pause for a live demo</h2>
-            </div>
-            <small>If the sprint review includes a live demo, Scrum Studio will add a dedicated handoff slide before Looking Ahead.</small>
-          </div>
-
-          <div class="demo-toggle-panel">
-            <label class="demo-check">
-              <input type="checkbox" name="hasDemo" value="yes"${demo.enabled ? " checked" : ""}>
-              <span>
-                <strong>This review includes a live demo</strong>
-                <small>Add a clean Live Demo slide to pause the recap.</small>
-              </span>
-            </label>
-            <div class="demo-copy-grid">
-              <label class="field-group" for="demoTitle">
-                <span>Demo slide title</span>
-                <input class="text-input" id="demoTitle" name="demoTitle" type="text" value="${escapeHtml(demoTitle)}" placeholder="Example: Product Demo">
-              </label>
-              <label class="field-group" for="demoPresenters">
-                <span>Presenter names</span>
-                <textarea class="text-input narrative-textarea" id="demoPresenters" name="demoPresenters" rows="3" placeholder="One presenter per line">${escapeHtml(demoPresenters)}</textarea>
-              </label>
-            </div>
-            <label class="field-group" for="demoNote">
-              <span>Demo note</span>
-              <textarea class="text-input narrative-textarea" id="demoNote" name="demoNote" rows="3" placeholder="Example: Product owner will demo the workflow.">${escapeHtml(demoNote)}</textarea>
-            </label>
-          </div>
+          ${["delivery", "screenshot", "challenge", "risk", "next_steps", "live_demo"].map((type) => renderReviewSectionTemplate(type, draft)).join("")}
         </section>
 
         ${renderEnvironmentReadinessEditor(readiness, draft)}
@@ -2518,6 +2611,31 @@ function renderAdoReportNextStepsSection(section, nextIteration) {
   `;
 }
 
+function renderAdoReportLiveDemoSection(section) {
+  const presenters = Array.isArray(section.presenters) ? section.presenters : [];
+
+  return `
+    <article class="ado-report-special-card demo-report-card">
+      <div class="section-special-heading">
+        <span aria-hidden="true">${sectionIcon("live_demo")}</span>
+        <div>
+          <small>Live demo</small>
+          <h3>${escapeHtml(section.title || "Live Demo")}</h3>
+        </div>
+      </div>
+      ${
+        presenters.length > 0
+          ? `<div class="demo-presenter-list">
+              <span>Presenters</span>
+              ${presenters.map((presenter) => `<strong>${escapeHtml(presenter)}</strong>`).join("")}
+            </div>`
+          : ""
+      }
+      ${section.note ? `<p>${escapeHtml(section.note)}</p>` : ""}
+    </article>
+  `;
+}
+
 function renderAdoReportSection(section, index, nextIteration) {
   if (section.type === "screenshot") {
     return renderAdoReportScreenshotSection(section);
@@ -2533,6 +2651,10 @@ function renderAdoReportSection(section, index, nextIteration) {
 
   if (section.type === "next_steps") {
     return renderAdoReportNextStepsSection(section, nextIteration);
+  }
+
+  if (section.type === "live_demo") {
+    return renderAdoReportLiveDemoSection(section);
   }
 
   return renderAdoReportDeliverySection(section, index);
@@ -3518,8 +3640,6 @@ function renderAdoReportHtml(report) {
       </div>
       ${renderAdoNarrativeSections(narrativeSections, nextIteration)}
     </section>
-
-    ${renderAdoDemoSection(narrative.demo)}
 
     ${renderAdoEnvironmentReadiness(narrative.environmentReadiness)}
 
@@ -4687,6 +4807,10 @@ function renderAdoPresentationSectionSlides(sections, nextIteration = null) {
         return renderAdoPresentationNextStepsSlide(section, nextIteration);
       }
 
+      if (section.type === "live_demo") {
+        return renderAdoPresentationDemoSlide(section);
+      }
+
       return renderAdoPresentationDeliverySlide(section, index);
     })
     .join("");
@@ -4817,7 +4941,6 @@ function renderAdoPresentationPage(report, vibeInput) {
   const narrativeSlides = narrative
     ? `
       ${renderAdoPresentationSectionSlides(narrativeSections, nextIteration)}
-      ${renderAdoPresentationDemoSlide(narrative.demo)}
       ${renderAdoPresentationReadinessSlide(narrative.environmentReadiness)}
     `
     : `
