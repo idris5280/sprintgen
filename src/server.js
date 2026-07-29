@@ -313,7 +313,8 @@ function createSavedReviewFromReport(report, existingReview = null) {
     team: result.team || "",
     sprintName: iteration.name || getSprintLabel(iteration.path),
     sprintPath: iteration.path || "",
-    areaPath: result.areaPath || "",
+    areaPath: primaryAreaPath(result.areaPaths, result.areaPath),
+    areaPaths: normalizeAreaPathList(result.areaPaths, result.areaPath),
     dateRange: {
       startDate: iteration.startDate || "",
       finishDate: iteration.finishDate || ""
@@ -402,7 +403,14 @@ function listSavedReviews() {
 }
 
 function buildDraftFromSavedReview(review) {
-  const result = review.result || {};
+  const savedResult = review.result || {};
+  const savedAreaPaths = getSavedReviewAreaPaths(review, savedResult);
+  const result = {
+    ...savedResult,
+    areaPath: primaryAreaPath(savedAreaPaths),
+    areaPaths: savedAreaPaths,
+    areaPathLabel: areaPathDisplay(savedAreaPaths)
+  };
   const currentItems = normalizeStoryItems(result.workItems && result.workItems.items);
   const completedItems =
     result.metrics && result.metrics.items ? normalizeStoryItems(result.metrics.items.completed) : [];
@@ -600,7 +608,7 @@ function renderResultPage({ jobId, data }) {
           <strong>Select a mode:</strong>
           <div class="present-launch-actions">
             <a class="secondary-button" href="/present/${encodeURIComponent(jobId)}?vibe=light" target="_blank" rel="noreferrer">Light</a>
-            <a class="secondary-button" href="/present/${encodeURIComponent(jobId)}?vibe=dark" target="_blank" rel="noreferrer">Dark</a>
+            <a class="secondary-button" href="/present/${encodeURIComponent(jobId)}?vibe=blue" target="_blank" rel="noreferrer">Blue</a>
             <a class="secondary-button strong" href="/present/${encodeURIComponent(jobId)}?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
           </div>
         </div>
@@ -742,12 +750,13 @@ function renderAdoWorkItems(items) {
           const title = fields["System.Title"] || item.Title || "Untitled work item";
           const state = fields["System.State"] || item.State || "Unknown";
           const type = fields["System.WorkItemType"] || item.WorkItemType || "Work Item";
+          const areaPath = fields["System.AreaPath"] || item.AreaPath || item.areaPath || "";
 
           return `
             <div>
               <span>${escapeHtml(type)} ${escapeHtml(id)}</span>
               <strong>${escapeHtml(title)}</strong>
-              <small>${escapeHtml(state)}</small>
+              <small>${escapeHtml([state, areaPath ? areaPathLeaf(areaPath) : ""].filter(Boolean).join(" - "))}</small>
             </div>
           `;
         })
@@ -1012,7 +1021,7 @@ function renderMetricStoryList(title, items, emptyText) {
                 <strong>${escapeHtml(item.title)}</strong>
                 <small>${escapeHtml(item.type)} ${escapeHtml(item.id)} &middot; ${escapeHtml(item.state)}${
                   item.storyPoints !== null && item.storyPoints !== undefined ? ` &middot; ${escapeHtml(formatNumber(item.storyPoints))} pts` : ""
-                }</small>
+                }${item.areaPath ? ` &middot; ${escapeHtml(areaPathLeaf(item.areaPath))}` : ""}</small>
               </div>
             `
           )
@@ -1032,6 +1041,194 @@ function asArray(value) {
   }
 
   return [value];
+}
+
+function normalizeAreaPathList(value, fallback = "") {
+  const rawValues = [...asArray(value), ...asArray(fallback)]
+    .flatMap((entry) => String(entry || "").split(/\r?\n/))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return [...new Set(rawValues)];
+}
+
+function primaryAreaPath(areaPaths, fallback = "") {
+  return normalizeAreaPathList(areaPaths, fallback)[0] || "";
+}
+
+function areaPathLeaf(areaPath) {
+  const clean = String(areaPath || "").trim();
+  const parts = clean.split("\\").filter(Boolean);
+
+  return parts[parts.length - 1] || clean;
+}
+
+function areaPathDisplay(areaPaths, fallback = "All team areas") {
+  const paths = normalizeAreaPathList(areaPaths);
+
+  if (paths.length === 0) {
+    return fallback;
+  }
+
+  if (paths.length === 1) {
+    return paths[0];
+  }
+
+  return `${paths.length} work areas: ${paths.map(areaPathLeaf).join(", ")}`;
+}
+
+function renderAreaPathHiddenInputs(areaPaths, fallback = "") {
+  const paths = normalizeAreaPathList(areaPaths, fallback);
+  const hiddenInputs = paths
+    .map((areaPath) => `<input type="hidden" name="areaPaths" value="${escapeHtml(areaPath)}">`)
+    .join("");
+
+  return `
+        <input type="hidden" name="areaPath" value="${escapeHtml(paths[0] || "")}">
+        ${hiddenInputs}`;
+}
+
+function buildAdoAdminHrefForResult(result = {}) {
+  const params = new URLSearchParams();
+  const areaPaths = normalizeAreaPathList(result.areaPaths, result.areaPath);
+
+  if (result.team) {
+    params.set("team", result.team);
+  }
+
+  for (const areaPath of areaPaths) {
+    params.append("areaPaths", areaPath);
+  }
+
+  if (areaPaths[0]) {
+    params.set("areaPath", areaPaths[0]);
+  }
+
+  const query = params.toString();
+  return query ? `/ado-admin?${query}` : "/ado-admin";
+}
+
+function getSavedReviewAreaPaths(review = {}, result = null) {
+  const savedResult = result || review.result || {};
+  return normalizeAreaPathList([...asArray(review.areaPaths), ...asArray(savedResult.areaPaths)], review.areaPath || savedResult.areaPath);
+}
+
+function getRawWorkItemFields(item) {
+  return item && item.fields ? item.fields : item || {};
+}
+
+function rawWorkItemId(item) {
+  const fields = getRawWorkItemFields(item);
+
+  return String((item && (item.WorkItemId || item.id)) || fields["System.Id"] || "").trim();
+}
+
+function attachAreaPathToWorkItem(item, areaPath) {
+  const cleanAreaPath = String(areaPath || "").trim();
+
+  if (!cleanAreaPath || !item || typeof item !== "object") {
+    return item;
+  }
+
+  if (item.fields) {
+    return {
+      ...item,
+      AreaPath: item.AreaPath || cleanAreaPath,
+      fields: {
+        ...item.fields,
+        "System.AreaPath": item.fields["System.AreaPath"] || cleanAreaPath
+      }
+    };
+  }
+
+  return {
+    ...item,
+    AreaPath: item.AreaPath || cleanAreaPath
+  };
+}
+
+function mergeWorkItemResults(results) {
+  const itemsById = new Map();
+  const sourceNames = [];
+  const warnings = [];
+
+  for (const result of results || []) {
+    if (!result) {
+      continue;
+    }
+
+    if (result.source && !sourceNames.includes(result.source)) {
+      sourceNames.push(result.source);
+    }
+
+    if (result.warning) {
+      warnings.push(result.warning);
+    }
+
+    for (const item of result.items || []) {
+      const id = rawWorkItemId(item) || JSON.stringify(item);
+
+      if (!itemsById.has(id)) {
+        itemsById.set(id, item);
+        continue;
+      }
+
+      const existing = itemsById.get(id);
+      const existingArea = String((existing && (existing.AreaPath || existing.areaPath)) || "").trim();
+      const nextArea = String((item && (item.AreaPath || item.areaPath)) || "").trim();
+
+      if (!existingArea && nextArea) {
+        itemsById.set(id, attachAreaPathToWorkItem(existing, nextArea));
+      }
+    }
+  }
+
+  const items = [...itemsById.values()];
+
+  return {
+    source: sourceNames.length > 1 ? `Combined ${sourceNames.join(", ")}` : sourceNames[0] || "Combined work items",
+    count: items.length,
+    items,
+    warning: [...new Set(warnings)].join(" ")
+  };
+}
+
+async function queryIterationSnapshotRowsForAreas({ pat, org, project, team, iterationPath, areaPaths = [] }) {
+  const selectedAreaPaths = normalizeAreaPathList(areaPaths);
+
+  if (selectedAreaPaths.length === 0) {
+    return queryIterationSnapshotRows({ pat, org, project, team, iterationPath, areaPath: "" });
+  }
+
+  const rows = [];
+
+  for (const areaPath of selectedAreaPaths) {
+    const areaRows = await queryIterationSnapshotRows({ pat, org, project, team, iterationPath, areaPath });
+    rows.push(...areaRows.map((row) => ({ ...row, AreaPath: row.AreaPath || areaPath })));
+  }
+
+  return rows;
+}
+
+async function queryIterationWorkItemsForAreas({ pat, org, project, team, iterationPath, areaPaths = [] }) {
+  const selectedAreaPaths = normalizeAreaPathList(areaPaths);
+
+  if (selectedAreaPaths.length === 0) {
+    return queryIterationWorkItems({ pat, org, project, team, iterationPath, areaPath: "" });
+  }
+
+  const results = [];
+
+  for (const areaPath of selectedAreaPaths) {
+    const result = await queryIterationWorkItems({ pat, org, project, team, iterationPath, areaPath });
+    results.push({
+      ...result,
+      areaPath,
+      items: (result.items || []).map((item) => attachAreaPathToWorkItem(item, areaPath))
+    });
+  }
+
+  return mergeWorkItemResults(results);
 }
 
 function splitBullets(value) {
@@ -1100,6 +1297,10 @@ function storyMeta(item) {
 
   if (item.storyPoints !== null && item.storyPoints !== undefined) {
     parts.push(`${formatNumber(item.storyPoints)} pts`);
+  }
+
+  if (item.areaPath) {
+    parts.push(areaPathLeaf(item.areaPath));
   }
 
   return parts.filter(Boolean).map(escapeHtml).join(" &middot; ");
@@ -1656,8 +1857,9 @@ function parseAdoNarrative(body, currentItems, nextItems, files = [], previousNa
   };
 }
 
-async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "" }) {
-  const result = await buildAdoDataPreview({ pat, team, sprint, areaPath });
+async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "", areaPaths = [] }) {
+  const selectedAreaPaths = normalizeAreaPathList(areaPaths, areaPath);
+  const result = await buildAdoDataPreview({ pat, team, sprint, areaPaths: selectedAreaPaths });
   const currentItems = normalizeStoryItems(result.workItems.items);
   const completedItems = result.metrics && result.metrics.items ? normalizeStoryItems(result.metrics.items.completed) : [];
   const nextIteration = normalizeIterationForDisplay(findNextIteration(result.iterations || [], result.iteration));
@@ -1670,13 +1872,13 @@ async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "" }) {
 
   if (nextIteration) {
     try {
-      nextWorkItems = await queryIterationWorkItems({
+      nextWorkItems = await queryIterationWorkItemsForAreas({
         pat,
         org: adoConfig.org,
         project: adoConfig.project,
         team,
         iterationPath: nextIteration.path,
-        areaPath: result.areaPath
+        areaPaths: result.areaPaths
       });
     } catch (error) {
       nextWorkItems.warning = `Next sprint stories could not be loaded: ${error.message}`;
@@ -2039,8 +2241,7 @@ function renderAdoReviewBuilderContent({
   const demoTitle = demo.title || "Live Demo";
   const demoPresenters = Array.isArray(demo.presenters) ? demo.presenters.join("\n") : "";
   const demoNote = demo.note || "";
-  const backLinkHref =
-    backHref || `/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}`;
+  const backLinkHref = backHref || buildAdoAdminHrefForResult(result);
   const warningHtml = filterContributorWarnings([draft.nextWorkItems.warning, ...(result.warnings || [])], metrics.contributors)
     .map((warning) => `<li>${escapeHtml(warning)}</li>`)
     .join("");
@@ -2073,7 +2274,7 @@ function renderAdoReviewBuilderContent({
       <form class="story-builder-form" action="${escapeHtml(action)}" method="post" enctype="multipart/form-data" data-review-builder-form>
         <input type="hidden" name="team" value="${escapeHtml(result.team)}">
         <input type="hidden" name="sprint" value="${escapeHtml(result.iteration.path)}">
-        <input type="hidden" name="areaPath" value="${escapeHtml(result.areaPath || "")}">
+        ${renderAreaPathHiddenInputs(result.areaPaths, result.areaPath)}
 
         <section class="narrative-section">
           <div class="section-heading-row">
@@ -2412,17 +2613,23 @@ function renderAdoReadinessAudience(title, audience) {
   }
 
   const stories = Array.isArray(audience.stories) ? audience.stories : [];
+  const hasStories = stories.length > 0;
+  const fallbackMessage =
+    audience.message ||
+    (title === "Training Environment"
+      ? "We have items ready to go into the training environment."
+      : "We have items ready to go into UAT.");
 
   return `
     <article class="readiness-report-card">
       <div>
-        <span>${escapeHtml(title)}</span>
-        <h3>${escapeHtml(stories.length > 0 ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : "Ready for prep")}</h3>
+        <span>${escapeHtml(hasStories ? title : "Readiness")}</span>
+        <h3>${escapeHtml(hasStories ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : title)}</h3>
       </div>
       ${
-        stories.length > 0
+        hasStories
           ? renderStoryChips(stories, "", { preview: true, previewLimit: 5 })
-          : `<p>${escapeHtml(audience.message || (title === "Training Environment" ? "We have items ready to go into the training environment." : "We have items ready to go into UAT."))}</p>`
+          : `<p>${escapeHtml(fallbackMessage)}</p>`
       }
     </article>
   `;
@@ -3276,6 +3483,7 @@ function renderAdoReportHtml(report) {
       <p>${escapeHtml(summary)}</p>
       <div class="hero-facts">
         <div><span>Team</span><strong>${escapeHtml(result.team)}</strong></div>
+        <div><span>Work areas</span><strong>${escapeHtml(areaPathDisplay(normalizeAreaPathList(result.areaPaths, result.areaPath)))}</strong></div>
         <div><span>Dates</span><strong>${escapeHtml(formatDateOnly(result.iteration.startDate))} to ${escapeHtml(formatDateOnly(result.iteration.finishDate))}</strong></div>
       </div>
       ${renderAdoReportContributors(metrics.contributors)}
@@ -3357,7 +3565,7 @@ function renderAdoReportResultPage({ jobId, report }) {
           <strong>Select a mode:</strong>
           <div class="present-launch-actions">
             <a class="secondary-button" href="/ado-present/${encodeURIComponent(jobId)}?vibe=light" target="_blank" rel="noreferrer">Light</a>
-            <a class="secondary-button" href="/ado-present/${encodeURIComponent(jobId)}?vibe=dark" target="_blank" rel="noreferrer">Dark</a>
+            <a class="secondary-button" href="/ado-present/${encodeURIComponent(jobId)}?vibe=blue" target="_blank" rel="noreferrer">Blue</a>
             <a class="secondary-button strong" href="/ado-present/${encodeURIComponent(jobId)}?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
           </div>
         </div>
@@ -3463,12 +3671,13 @@ function renderSavedReviewReadyPage({ review }) {
           <strong>Select a mode:</strong>
           <div class="present-launch-actions">
             <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=light" target="_blank" rel="noreferrer">Light</a>
-            <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=dark" target="_blank" rel="noreferrer">Dark</a>
+            <a class="secondary-button" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=blue" target="_blank" rel="noreferrer">Blue</a>
             <a class="secondary-button strong" href="/reviews/${encodeURIComponent(review.id)}/present?vibe=prismatic" target="_blank" rel="noreferrer">Prismatic</a>
           </div>
         </div>
         <div class="mini-summary">
           <div><span>Team</span><strong>${escapeHtml(result.team || review.team || "Not available")}</strong></div>
+          <div><span>Work areas</span><strong>${escapeHtml(areaPathDisplay(getSavedReviewAreaPaths(review, result)))}</strong></div>
           <div><span>Dates</span><strong>${escapeHtml(formatDateOnly(iteration.startDate))} to ${escapeHtml(formatDateOnly(iteration.finishDate))}</strong></div>
           <div><span>Updated</span><strong>${escapeHtml(formatSavedTimestamp(review.updatedAt || review.createdAt))}</strong></div>
         </div>
@@ -3739,7 +3948,7 @@ function renderAdoStatusSummary(result) {
         </div>
         <form action="/ado-admin/review" method="post">
           <input type="hidden" name="team" value="${escapeHtml(result.team)}">
-          <input type="hidden" name="areaPath" value="${escapeHtml(result.areaPath || "")}">
+          ${renderAreaPathHiddenInputs(result.areaPaths, result.areaPath)}
           <input type="hidden" name="sprint" value="${escapeHtml(result.iteration.path)}">
           <button class="primary-button" type="submit">Build sprint review</button>
         </form>
@@ -3752,8 +3961,8 @@ function renderAdoStatusSummary(result) {
           <small>${escapeHtml(result.iterationCount)} iterations visible</small>
         </div>
         <div>
-          <span>Area path</span>
-          <strong>${escapeHtml(result.areaPath || "All team areas")}</strong>
+          <span>Work areas</span>
+          <strong>${escapeHtml(areaPathDisplay(normalizeAreaPathList(result.areaPaths, result.areaPath)))}</strong>
         </div>
         <div>
           <span>Iteration path</span>
@@ -3831,36 +4040,38 @@ function renderIterationOptions(iterations, selectedSprint) {
     .join("");
 }
 
-function renderAreaOptions(areaPaths, selectedAreaPath) {
-  const selected = String(selectedAreaPath || "");
+function renderAreaOptions(areaPaths, selectedAreaPaths) {
+  const selected = new Set(normalizeAreaPathList(selectedAreaPaths));
   const options = (areaPaths || [])
     .map((area) => {
       const value = area.value || "";
 
-      return `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`;
+      return `<option value="${escapeHtml(value)}"${selected.has(value) ? " selected" : ""}>${escapeHtml(value)}</option>`;
     })
     .join("");
 
-  return `<option value="">Select an area path</option>${options}`;
+  return options;
 }
 
-function resolveSelectedAreaPath(areaPaths, selectedAreaPath, defaultAreaPath = "") {
-  const selected = String(selectedAreaPath || "").trim();
+function resolveSelectedAreaPaths(areaPaths, selectedAreaPaths, defaultAreaPath = "") {
+  const selected = normalizeAreaPathList(selectedAreaPaths);
   const areas = areaPaths || [];
+  const knownValues = new Set(areas.map((area) => area.value).filter(Boolean));
+  const validSelected = selected.filter((areaPath) => knownValues.has(areaPath));
 
-  if (selected && areas.some((area) => area.value === selected)) {
-    return selected;
+  if (validSelected.length > 0) {
+    return validSelected;
   }
 
-  if (selected && areas.length === 0) {
+  if (selected.length > 0 && areas.length === 0) {
     return selected;
   }
 
   if (defaultAreaPath && areas.some((area) => area.value === defaultAreaPath)) {
-    return defaultAreaPath;
+    return [defaultAreaPath];
   }
 
-  return (areas[0] && areas[0].value) || selected || "";
+  return areas[0] && areas[0].value ? [areas[0].value] : selected;
 }
 
 function formatIterationForClient(iteration) {
@@ -3926,7 +4137,7 @@ function renderAdoAdminPage({
   teams = [],
   selectedTeam = "",
   areaPaths = [],
-  selectedAreaPath = "",
+  selectedAreaPaths = [],
   iterations = [],
   result = null,
   error = null
@@ -3941,7 +4152,8 @@ function renderAdoAdminPage({
     ? {
         team: selectedTeam,
         areaPaths,
-        defaultAreaPath: selectedAreaPath,
+        defaultAreaPaths: normalizeAreaPathList(selectedAreaPaths),
+        defaultAreaPath: primaryAreaPath(selectedAreaPaths),
         iterations: iterations.map(formatIterationForClient)
       }
     : null;
@@ -3994,12 +4206,12 @@ function renderAdoAdminPage({
                   </select>
                   <small>Choose the sprint to review.</small>
                 </label>
-                <label class="field-group" for="areaPath">
-                  <span>Work area</span>
-                  <select class="text-input" id="areaPath" name="areaPath" required data-area-select${selectedTeam ? "" : " disabled"}>
-                    ${renderAreaOptions(areaPaths, selectedAreaPath)}
+                <label class="field-group" for="areaPaths">
+                  <span>Work areas</span>
+                  <select class="text-input area-multi-select" id="areaPaths" name="areaPaths" multiple required data-area-select${selectedTeam ? "" : " disabled"}>
+                    ${renderAreaOptions(areaPaths, selectedAreaPaths)}
                   </select>
-                  <small>Choose the work area to include.</small>
+                  <small>Choose one or more value areas for this combined review. Use Ctrl or Shift to select more than one.</small>
                 </label>
               </div>
             </div>
@@ -4008,7 +4220,7 @@ function renderAdoAdminPage({
               <span class="flow-step-number">3</span>
               <div>
                 <strong>Review builder</strong>
-                <p data-build-copy>Choose sprint and work area. Scrum Studio will load the builder below.</p>
+                <p data-build-copy>Choose sprint and work areas. Scrum Studio will load the builder below.</p>
               </div>
             </div>
           </div>
@@ -4050,28 +4262,42 @@ function renderAdoAdminPage({
 
           function setOptions(select, items, placeholder, getValue, getLabel, selectedValue) {
             select.innerHTML = "";
-            var placeholderOption = document.createElement("option");
-            placeholderOption.value = "";
-            placeholderOption.textContent = placeholder;
-            select.appendChild(placeholderOption);
+            var selectedValues = Array.isArray(selectedValue)
+              ? selectedValue.map(String)
+              : selectedValue
+                ? [String(selectedValue)]
+                : [];
+
+            if (!select.multiple) {
+              var placeholderOption = document.createElement("option");
+              placeholderOption.value = "";
+              placeholderOption.textContent = placeholder;
+              select.appendChild(placeholderOption);
+            }
 
             items.forEach(function (item) {
               var option = document.createElement("option");
               option.value = getValue(item);
               option.textContent = getLabel(item);
-              if (selectedValue && option.value === selectedValue) {
+              if (selectedValues.indexOf(option.value) !== -1) {
                 option.selected = true;
               }
               select.appendChild(option);
             });
           }
 
+          function getSelectedAreaPaths() {
+            return Array.prototype.slice.call(areaSelect.selectedOptions || [])
+              .map(function (option) { return option.value; })
+              .filter(Boolean);
+          }
+
           function updateBuildState() {
-            var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
+            var ready = Boolean(teamSelect.value && getSelectedAreaPaths().length > 0 && sprintSelect.value);
             if (buildCopy) {
               buildCopy.textContent = ready
                 ? "Scrum Studio is loading the review builder below."
-                : "Choose sprint and work area. Scrum Studio will load the builder below.";
+                : "Choose sprint and work areas. Scrum Studio will load the builder below.";
             }
           }
 
@@ -4116,13 +4342,14 @@ function renderAdoAdminPage({
           async function loadInlineBuilder(force) {
             if (!builderMount) return;
 
-            var ready = Boolean(teamSelect.value && areaSelect.value && sprintSelect.value);
+            var selectedAreaPaths = getSelectedAreaPaths();
+            var ready = Boolean(teamSelect.value && selectedAreaPaths.length > 0 && sprintSelect.value);
             if (!ready) {
               clearBuilder();
               return;
             }
 
-            var key = [teamSelect.value, areaSelect.value, sprintSelect.value].join("||");
+            var key = [teamSelect.value, selectedAreaPaths.join("::"), sprintSelect.value].join("||");
             if (!force && key === lastBuilderKey && builderMount.innerHTML.trim()) {
               return;
             }
@@ -4133,7 +4360,10 @@ function renderAdoAdminPage({
 
             var body = new URLSearchParams();
             body.set("team", teamSelect.value);
-            body.set("areaPath", areaSelect.value);
+            body.set("areaPath", selectedAreaPaths[0] || "");
+            selectedAreaPaths.forEach(function (areaPath) {
+              body.append("areaPaths", areaPath);
+            });
             body.set("sprint", sprintSelect.value);
             body.set("inline", "1");
 
@@ -4148,7 +4378,7 @@ function renderAdoAdminPage({
               });
               var html = await response.text();
 
-              if (key !== [teamSelect.value, areaSelect.value, sprintSelect.value].join("||")) {
+              if (key !== [teamSelect.value, getSelectedAreaPaths().join("::"), sprintSelect.value].join("||")) {
                 return;
               }
 
@@ -4174,7 +4404,7 @@ function renderAdoAdminPage({
           }
 
           function resetScope(message) {
-            setOptions(areaSelect, [], "Select an area path", function () { return ""; }, function () { return ""; });
+            setOptions(areaSelect, [], "Select one or more area paths", function () { return ""; }, function () { return ""; });
             setOptions(sprintSelect, [], "Select a sprint", function () { return ""; }, function () { return ""; });
             areaSelect.disabled = true;
             sprintSelect.disabled = true;
@@ -4192,10 +4422,14 @@ function renderAdoAdminPage({
             setOptions(
               areaSelect,
               areas,
-              "Select an area path",
+              "Select one or more area paths",
               function (area) { return area.value || ""; },
               function (area) { return area.value || ""; },
-              data.defaultAreaPath || ""
+              Array.isArray(data.defaultAreaPaths) && data.defaultAreaPaths.length > 0
+                ? data.defaultAreaPaths
+                : data.defaultAreaPath
+                  ? [data.defaultAreaPath]
+                  : []
             );
             setOptions(
               sprintSelect,
@@ -4464,12 +4698,14 @@ function renderAdoPresentationDemoSlide(demo) {
   }
 
   const presenters = Array.isArray(demo.presenters) ? demo.presenters : [];
+  const demoTitle = demo.title || "Live Demo";
+  const showKicker = demoTitle.trim().toLowerCase() !== "live demo";
 
   return `
     <section class="ado-present-slide demo-handoff-slide">
       <div class="present-card demo-handoff-card">
-        <span class="present-kicker">Live Demo</span>
-        <h2>${escapeHtml(demo.title || "Live Demo")}</h2>
+        ${showKicker ? `<span class="present-kicker">Live Demo</span>` : ""}
+        <h2>${escapeHtml(demoTitle)}</h2>
         ${
           presenters.length > 0
             ? `<div class="demo-presenter-chips">
@@ -4477,7 +4713,7 @@ function renderAdoPresentationDemoSlide(demo) {
               </div>`
             : ""
         }
-        ${demo.note ? `<p>${escapeHtml(demo.note)}</p>` : `<p>Pause here for the live walkthrough.</p>`}
+        ${demo.note ? `<p>${escapeHtml(demo.note)}</p>` : ""}
       </div>
     </section>
   `;
@@ -4489,15 +4725,25 @@ function renderAdoPresentationReadinessAudience(title, audience) {
   }
 
   const stories = Array.isArray(audience.stories) ? audience.stories : [];
+  const hasStories = stories.length > 0;
+  const fallbackMessage =
+    audience.message ||
+    (title === "Training Environment"
+      ? "We have items ready to go into the training environment."
+      : "We have items ready to go into UAT.");
+  const kicker = hasStories ? title : "Readiness";
+  const heading = hasStories ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : title;
 
   return `
-    <article class="present-readiness-card">
-      <span>${escapeHtml(title)}</span>
-      <h3>${escapeHtml(stories.length > 0 ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : "Ready for prep")}</h3>
+    <article class="present-readiness-card${hasStories ? " has-stories" : " is-message-only"}">
+      <span>${escapeHtml(kicker)}</span>
+      <h3>${escapeHtml(heading)}</h3>
       ${
-        stories.length > 0
+        hasStories
           ? renderStoryChips(stories, "", { preview: true, previewLimit: 4 })
-          : `<p>${escapeHtml(audience.message || (title === "Training Environment" ? "We have items ready to go into the training environment." : "We have items ready to go into UAT."))}</p>`
+          : `<div class="present-readiness-message">
+              <p>${escapeHtml(fallbackMessage)}</p>
+            </div>`
       }
     </article>
   `;
@@ -4614,7 +4860,7 @@ function renderAdoPresentationPage(report, vibeInput) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/ado-present.css?v=13">
+  <link rel="stylesheet" href="/assets/ado-present.css?v=18">
 </head>
 <body class="vibe-${escapeHtml(vibe)}">
   <div class="present-progress" aria-hidden="true"><span></span></div>
@@ -4627,6 +4873,7 @@ function renderAdoPresentationPage(report, vibeInput) {
         <p>${escapeHtml(result.team)}</p>
         <dl>
           <div><dt>Dates</dt><dd>${escapeHtml(formatDateOnly(result.iteration.startDate))} to ${escapeHtml(formatDateOnly(result.iteration.finishDate))}</dd></div>
+          <div><dt>Work areas</dt><dd>${escapeHtml(areaPathDisplay(normalizeAreaPathList(result.areaPaths, result.areaPath)))}</dd></div>
           <div><dt>Project</dt><dd>${escapeHtml(result.config.project)}</dd></div>
         </dl>
         ${renderPresentationContributors(metrics.contributors)}
@@ -4745,8 +4992,9 @@ const reviewBuilderUpload = multer({
   }
 });
 
-async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
-  const selectedAreaPath = String(areaPath || "").trim();
+async function buildAdoDataPreview({ pat, team, sprint, areaPath = "", areaPaths = [] }) {
+  const selectedAreaPaths = normalizeAreaPathList(areaPaths, areaPath);
+  const selectedAreaPath = primaryAreaPath(selectedAreaPaths);
   const iterationsResult = await listTeamIterations({
     pat,
     org: adoConfig.org,
@@ -4759,13 +5007,13 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
     org: adoConfig.org,
     project: adoConfig.project
   });
-  const burndownRows = await queryIterationSnapshotRows({
+  const burndownRows = await queryIterationSnapshotRowsForAreas({
     pat,
     org: adoConfig.org,
     project: adoConfig.project,
     team,
     iterationPath: iteration.path,
-    areaPath: selectedAreaPath
+    areaPaths: selectedAreaPaths
   });
   const burndown = summarizeBurndownRows(burndownRows);
   const warnings = [];
@@ -4786,13 +5034,13 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
   };
 
   try {
-    workItems = await queryIterationWorkItems({
+    workItems = await queryIterationWorkItemsForAreas({
       pat,
       org: adoConfig.org,
       project: adoConfig.project,
       team,
       iterationPath: iteration.path,
-      areaPath: selectedAreaPath
+      areaPaths: selectedAreaPaths
     });
 
     if (workItems.warning) {
@@ -4806,13 +5054,13 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
 
   for (const velocityIteration of velocityIterations) {
     try {
-      const velocityWorkItems = await queryIterationWorkItems({
+      const velocityWorkItems = await queryIterationWorkItemsForAreas({
         pat,
           org: adoConfig.org,
           project: adoConfig.project,
           team,
           iterationPath: velocityIteration.path,
-          areaPath: selectedAreaPath
+          areaPaths: selectedAreaPaths
         });
 
       velocityInputs.push({
@@ -4846,6 +5094,8 @@ async function buildAdoDataPreview({ pat, team, sprint, areaPath = "" }) {
     config: adoConfig,
     team,
     areaPath: selectedAreaPath,
+    areaPaths: selectedAreaPaths,
+    areaPathLabel: areaPathDisplay(selectedAreaPaths),
     iteration,
     iterations: iterationsResult.iterations,
     iterationCount: iterationsResult.count,
@@ -5154,7 +5404,7 @@ app.post("/reviews/:id/refresh", async (req, res) => {
     const iteration = result.iteration || {};
     const team = review.team || result.team || "";
     const sprint = review.sprintPath || iteration.path || iteration.name || "";
-    const areaPath = review.areaPath || result.areaPath || "";
+    const areaPaths = getSavedReviewAreaPaths(review, result);
 
     if (!pat) {
       throw {
@@ -5174,7 +5424,7 @@ app.post("/reviews/:id/refresh", async (req, res) => {
       pat,
       team,
       sprint,
-      areaPath
+      areaPaths
     });
     const narrative = remapNarrativeStories(review.narrative || {}, draft.currentItems, draft.nextWorkItems.items);
 
@@ -5268,7 +5518,7 @@ app.get("/ado-admin", async (req, res) => {
 
   try {
     const selectedTeam = String(req.query.team || "").trim();
-    const requestedAreaPath = String(req.query.areaPath || "").trim();
+    const requestedAreaPaths = normalizeAreaPathList(req.query.areaPaths, req.query.areaPath);
     const teamsResult = await listProjectTeams({
       pat: session.pat,
       org: adoConfig.org,
@@ -5276,7 +5526,7 @@ app.get("/ado-admin", async (req, res) => {
     });
     let iterations = [];
     let areaPaths = [];
-    let selectedAreaPath = requestedAreaPath;
+    let selectedAreaPaths = requestedAreaPaths;
 
     if (selectedTeam) {
       const iterationsResult = await listTeamIterations({
@@ -5293,7 +5543,7 @@ app.get("/ado-admin", async (req, res) => {
       });
       iterations = iterationsResult.iterations;
       areaPaths = areaPathsResult.areas;
-      selectedAreaPath = resolveSelectedAreaPath(areaPaths, requestedAreaPath, areaPathsResult.defaultValue);
+      selectedAreaPaths = resolveSelectedAreaPaths(areaPaths, requestedAreaPaths, areaPathsResult.defaultValue);
     }
 
     res.send(
@@ -5301,7 +5551,7 @@ app.get("/ado-admin", async (req, res) => {
         teams: teamsResult.teams,
         selectedTeam,
         areaPaths,
-        selectedAreaPath,
+        selectedAreaPaths,
         iterations
       })
     );
@@ -5377,12 +5627,13 @@ app.get("/ado-admin/scope", async (req, res) => {
         team: selectedTeam
       })
     ]);
-    const defaultAreaPath = resolveSelectedAreaPath(areaPathsResult.areas, "", areaPathsResult.defaultValue);
+    const defaultAreaPaths = resolveSelectedAreaPaths(areaPathsResult.areas, [], areaPathsResult.defaultValue);
 
     res.json({
       team: selectedTeam,
       areaPaths: areaPathsResult.areas,
-      defaultAreaPath,
+      defaultAreaPath: primaryAreaPath(defaultAreaPaths),
+      defaultAreaPaths,
       iterations: iterationsResult.iterations.map(formatIterationForClient)
     });
   } catch (error) {
@@ -5423,14 +5674,14 @@ async function handleAdoReviewBuilder(req, res) {
 
   const selectedTeam = String(req.body.team || "").trim();
   const selectedSprint = String(req.body.sprint || "").trim();
-  const selectedAreaPath = String(req.body.areaPath || "").trim();
+  const selectedAreaPaths = normalizeAreaPathList(req.body.areaPaths, req.body.areaPath);
 
   try {
     const draft = await buildAdoReviewDraft({
       pat: session.pat,
       team: selectedTeam,
       sprint: selectedSprint,
-      areaPath: selectedAreaPath
+      areaPaths: selectedAreaPaths
     });
 
     res.send(wantsPartial ? renderAdoReviewBuilderContent({ draft, inline: true }) : renderAdoReviewBuilderPage({ draft }));
@@ -5471,14 +5722,14 @@ app.post("/ado-admin/generate-report", createJobId, reviewBuilderUpload.any(), a
 
   const selectedTeam = String(req.body.team || "").trim();
   const selectedSprint = String(req.body.sprint || "").trim();
-  const selectedAreaPath = String(req.body.areaPath || "").trim();
+  const selectedAreaPaths = normalizeAreaPathList(req.body.areaPaths, req.body.areaPath);
 
   try {
     const draft = await buildAdoReviewDraft({
       pat: session.pat,
       team: selectedTeam,
       sprint: selectedSprint,
-      areaPath: selectedAreaPath
+      areaPaths: selectedAreaPaths
     });
     const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items, req.files);
 
@@ -5591,14 +5842,14 @@ app.post("/ado-admin/presentation", createJobId, async (req, res) => {
 
   const selectedTeam = String(req.body.team || "").trim();
   const selectedSprint = String(req.body.sprint || "").trim();
-  const selectedAreaPath = String(req.body.areaPath || "").trim();
+  const selectedAreaPaths = normalizeAreaPathList(req.body.areaPaths, req.body.areaPath);
 
   try {
     const result = await buildAdoDataPreview({
       pat: session.pat,
       team: selectedTeam,
       sprint: selectedSprint,
-      areaPath: selectedAreaPath
+      areaPaths: selectedAreaPaths
     });
     const paths = getJobPaths(req.jobId);
 

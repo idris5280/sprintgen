@@ -2930,6 +2930,22 @@ select.text-input option {
   color: #f3f8ff;
 }
 
+.area-multi-select {
+  min-height: 142px;
+  padding: 10px;
+}
+
+.area-multi-select option {
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.area-multi-select option:checked {
+  background: linear-gradient(135deg, rgba(61, 156, 255, .95), rgba(14, 191, 202, .85));
+  color: #061322;
+  font-weight: 800;
+}
+
 .form-heading,
 .scope-status,
 .scope-status.good,

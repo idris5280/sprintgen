@@ -32,19 +32,21 @@ body {
 }
 
 body.vibe-dark {
-  --ink: #f5f7fb;
-  --muted: #b9c2cc;
-  --panel: rgba(15, 16, 18, .9);
-  --line: rgba(220, 225, 230, .22);
-  --blue: #d6dde6;
-  --aqua: #f4f7fb;
-  --pink: #c7ced8;
-  --yellow: #ffffff;
-  --shadow: 0 32px 90px rgba(0, 0, 0, .42);
+  --ink: #f4f9ff;
+  --muted: #bdd7f4;
+  --panel: rgba(8, 42, 92, .88);
+  --line: rgba(154, 205, 255, .3);
+  --blue: #9bd3ff;
+  --aqua: #d7efff;
+  --pink: #62b7ff;
+  --yellow: #eaf6ff;
+  --green: #78c7ff;
+  --shadow: 0 32px 90px rgba(0, 22, 58, .46);
   background:
-    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, .12), transparent 24%),
-    radial-gradient(circle at 88% 12%, rgba(198, 207, 218, .16), transparent 26%),
-    linear-gradient(135deg, #030405 0%, #111315 52%, #050607 100%);
+    radial-gradient(circle at 12% 18%, rgba(95, 175, 255, .22), transparent 24%),
+    radial-gradient(circle at 88% 12%, rgba(180, 222, 255, .18), transparent 26%),
+    radial-gradient(circle at 72% 86%, rgba(0, 84, 170, .34), transparent 30%),
+    linear-gradient(135deg, #002868 0%, #073a82 48%, #001c4d 100%);
 }
 
 body.vibe-prismatic {
@@ -76,25 +78,31 @@ body.vibe-dark .velocity-track,
 body.vibe-dark .chart-caption span,
 body.vibe-dark .empty-state,
 body.vibe-dark .present-business-value {
-  background: rgba(255, 255, 255, .1);
-  border-color: rgba(255, 255, 255, .18);
+  background: rgba(224, 243, 255, .1);
+  border-color: rgba(154, 205, 255, .24);
   color: var(--muted);
 }
 
 body.vibe-dark .velocity-average {
-  background: #ffd166;
-  border-color: #ffe39a;
-  color: #10212c;
+  background: #d7efff;
+  border-color: #9bd3ff;
+  color: #002868;
 }
 
 body.vibe-dark .velocity-average span,
 body.vibe-dark .velocity-average strong,
 body.vibe-dark .velocity-average small {
-  color: #10212c;
+  color: #002868;
 }
 
 body.vibe-dark .velocity-fill {
-  background: linear-gradient(90deg, #23b7ff, #0ee3c4, #ffd166);
+  background: linear-gradient(90deg, #1d8de6, #65c4ff, #d7efff);
+}
+
+body.vibe-dark .present-card {
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(120deg, rgba(41, 137, 235, .72), rgba(112, 195, 255, .7), rgba(229, 246, 255, .72)) border-box;
 }
 
 body.vibe-prismatic .present-card::before {
@@ -131,6 +139,51 @@ body::after {
     linear-gradient(270deg, rgba(14, 191, 202, .2), transparent 26%) right bottom / 34vw 100vh no-repeat;
 }
 
+body.vibe-dark::before {
+  background-image:
+    radial-gradient(circle, rgba(221, 243, 255, .26) 0 2px, transparent 3px),
+    radial-gradient(circle, rgba(94, 178, 255, .24) 0 2px, transparent 3px),
+    radial-gradient(circle, rgba(21, 101, 192, .2) 0 2px, transparent 3px);
+  background-position: 8vw 22vh, 76vw 18vh, 88vw 78vh;
+  background-repeat: no-repeat;
+}
+
+body.vibe-dark::after {
+  background:
+    linear-gradient(90deg, rgba(90, 173, 255, .2), transparent 24%) left top / 34vw 100vh no-repeat,
+    linear-gradient(270deg, rgba(190, 228, 255, .18), transparent 26%) right bottom / 34vw 100vh no-repeat;
+}
+
+body.vibe-prismatic::before {
+  background:
+    radial-gradient(circle at 8% 18%, rgba(0, 240, 255, .52) 0 3px, transparent 5px),
+    radial-gradient(circle at 22% 78%, rgba(255, 61, 242, .42) 0 4px, transparent 7px),
+    radial-gradient(circle at 42% 16%, rgba(255, 230, 109, .34) 0 3px, transparent 6px),
+    radial-gradient(circle at 58% 84%, rgba(123, 92, 255, .42) 0 5px, transparent 8px),
+    radial-gradient(circle at 74% 28%, rgba(0, 240, 255, .46) 0 3px, transparent 6px),
+    radial-gradient(circle at 90% 70%, rgba(255, 61, 242, .36) 0 4px, transparent 7px),
+    radial-gradient(ellipse at 50% 50%, rgba(0, 167, 255, .08), transparent 58%);
+  filter: saturate(1.18);
+  opacity: .72;
+  transform: translate3d(0, 0, 0);
+  animation: prismaticParticleDrift 28s linear infinite;
+  will-change: transform, background-position;
+}
+
+body.vibe-prismatic::after {
+  background:
+    linear-gradient(112deg, transparent 0 18%, rgba(0, 240, 255, .15) 19%, transparent 21% 42%, rgba(255, 61, 242, .12) 43%, transparent 45% 68%, rgba(255, 230, 109, .1) 69%, transparent 71%),
+    repeating-linear-gradient(112deg, transparent 0 48px, rgba(255, 255, 255, .1) 49px 51px, transparent 53px 150px),
+    radial-gradient(circle at 18% 86%, rgba(255, 61, 242, .16), transparent 28%),
+    radial-gradient(circle at 84% 12%, rgba(0, 240, 255, .18), transparent 30%);
+  background-size: 190vw 190vh, 170vw 170vh, 100vw 100vh, 100vw 100vh;
+  mix-blend-mode: screen;
+  opacity: .58;
+  transform: translate3d(0, 0, 0);
+  animation: prismaticWarpCurrent 18s linear infinite;
+  will-change: transform, background-position;
+}
+
 .ado-present-deck {
   position: relative;
   z-index: 1;
@@ -154,12 +207,12 @@ body::after {
   pointer-events: none;
   position: absolute;
   transform: translateX(-50%);
-  width: min(220px, 52vw);
+  width: min(196px, 48vw);
   z-index: 2;
 }
 
 .presentation-brand-rail.is-top {
-  top: clamp(22px, 5vh, 46px);
+  top: clamp(12px, 3vh, 28px);
 }
 
 .presentation-brand-rail.is-bottom {
@@ -169,18 +222,20 @@ body::after {
 .presentation-brand-rail .brand-rail-logo {
   display: block;
   height: auto;
-  max-height: 28px;
+  max-height: 24px;
   width: 100%;
 }
 
 body.vibe-dark .presentation-brand-rail {
-  color: rgba(248, 250, 252, .9);
+  color: #ffffff;
+  filter: drop-shadow(0 0 12px rgba(204, 233, 255, .28));
+  opacity: .98;
 }
 
 body.vibe-prismatic .presentation-brand-rail {
-  color: #dffcff;
-  filter: drop-shadow(0 0 14px rgba(0, 240, 255, .3));
-  opacity: .96;
+  color: #0d4d84;
+  filter: drop-shadow(0 6px 12px rgba(255, 255, 255, .46));
+  opacity: .98;
 }
 
 .present-card {
@@ -487,8 +542,24 @@ dl div {
 }
 
 body.vibe-dark .burn-outcome-marker.is-complete circle {
-  fill: #30d470;
-  stroke: #f4f7fb;
+  fill: #2d8fe3;
+  stroke: #eaf6ff;
+}
+
+body.vibe-dark .burn-dot.final {
+  fill: #eaf6ff;
+  stroke: #65c4ff;
+}
+
+body.vibe-dark .burn-outcome-marker.is-improve circle {
+  fill: #b7e0ff;
+  stroke: #002868;
+}
+
+body.vibe-dark .burn-outcome-marker.is-improve path,
+body.vibe-dark .burn-outcome-marker.is-improve .marker-dot {
+  stroke: #002868;
+  fill: #002868;
 }
 
 body.vibe-prismatic .burn-outcome-marker.is-complete circle {
@@ -609,9 +680,9 @@ body.vibe-prismatic .burn-outcome-marker.is-complete circle {
 }
 
 body.vibe-dark .velocity-points {
-  background: #f4f7fb;
+  background: #eaf6ff;
   border-color: rgba(255, 255, 255, .92);
-  color: #050607;
+  color: #002868;
 }
 
 body.vibe-prismatic .velocity-points {
@@ -862,40 +933,47 @@ body.vibe-prismatic .present-contributor-list span {
 
 body.vibe-dark .present-business-value {
   background:
-    radial-gradient(circle at 92% 10%, rgba(255, 209, 102, .3), transparent 24%),
-    linear-gradient(135deg, rgba(23, 58, 35, .94), rgba(79, 66, 23, .92));
-  border-color: rgba(255, 209, 102, .48);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, .28), 0 0 32px rgba(255, 209, 102, .12);
+    radial-gradient(circle at 16% 20%, rgba(183, 224, 255, .24), transparent 26%),
+    radial-gradient(circle at 82% 24%, rgba(81, 164, 245, .2), transparent 28%),
+    linear-gradient(135deg, rgba(5, 56, 124, .96), rgba(11, 80, 160, .92));
+  border-color: rgba(155, 211, 255, .5);
+  box-shadow: 0 18px 46px rgba(0, 22, 58, .32), 0 0 34px rgba(105, 184, 255, .14);
 }
 
 body.vibe-dark .present-business-value span {
-  color: #a8f0bd;
+  color: #ccecff;
 }
 
 body.vibe-dark .present-business-value p {
-  color: #f8fff9;
+  color: #f7fbff;
 }
 
 body.vibe-dark .present-business-value::before {
-  background: #fff8d8;
+  background: #eaf6ff;
   box-shadow:
-    -30px 8px 0 0 rgba(255, 209, 102, .95),
-    -14px -12px 0 1px rgba(255, 255, 255, .9),
-    8px 10px 0 0 rgba(168, 240, 189, .82),
-    22px -8px 0 1px rgba(255, 209, 102, .8),
-    34px 14px 0 0 rgba(255, 255, 255, .84),
-    48px -2px 0 0 rgba(168, 240, 189, .68);
+    42px -16px 0 0 rgba(183, 224, 255, .68),
+    94px 18px 0 1px rgba(126, 199, 255, .58),
+    154px -6px 0 0 rgba(229, 246, 255, .74),
+    218px 22px 0 1px rgba(85, 169, 245, .52),
+    296px -18px 0 0 rgba(183, 224, 255, .6),
+    384px 10px 0 1px rgba(229, 246, 255, .66);
+  left: 8%;
+  right: auto;
+  top: 26px;
 }
 
 body.vibe-dark .present-business-value::after {
-  background: #ffd166;
+  background: #9bd3ff;
   box-shadow:
-    -46px 4px 0 0 rgba(255, 255, 255, .86),
-    -28px -10px 0 1px rgba(168, 240, 189, .76),
-    -10px 12px 0 0 rgba(255, 209, 102, .92),
-    12px -6px 0 0 rgba(255, 255, 255, .82),
-    26px 12px 0 1px rgba(168, 240, 189, .62),
-    42px -14px 0 0 rgba(255, 209, 102, .82);
+    -70px -10px 0 0 rgba(229, 246, 255, .68),
+    -18px 12px 0 1px rgba(126, 199, 255, .58),
+    44px -12px 0 0 rgba(183, 224, 255, .64),
+    118px 14px 0 1px rgba(69, 157, 235, .52),
+    202px -8px 0 0 rgba(229, 246, 255, .62),
+    292px 16px 0 1px rgba(126, 199, 255, .5);
+  bottom: 26px;
+  left: 36%;
+  right: auto;
 }
 
 body.vibe-prismatic .present-business-value {
@@ -1001,6 +1079,19 @@ body.vibe-prismatic .present-business-value::after {
   display: grid;
   gap: 8px;
   padding: clamp(18px, 2.4vw, 28px);
+  position: relative;
+  overflow: hidden;
+}
+
+.present-risk-heat::before {
+  background: var(--risk-accent, var(--blue));
+  border-radius: 999px;
+  content: "";
+  height: 5px;
+  left: clamp(18px, 2.4vw, 28px);
+  position: absolute;
+  right: clamp(18px, 2.4vw, 28px);
+  top: 0;
 }
 
 .present-risk-heat span {
@@ -1019,18 +1110,22 @@ body.vibe-prismatic .present-business-value::after {
 }
 
 .risk-present-card.severity-low .present-risk-heat {
-  border-color: rgba(39, 174, 96, .38);
+  --risk-accent: #2fbf71;
+  border-color: rgba(47, 191, 113, .48);
 }
 
 .risk-present-card.severity-medium .present-risk-heat {
-  border-color: rgba(255, 209, 102, .62);
+  --risk-accent: #f59e0b;
+  border-color: rgba(245, 158, 11, .62);
 }
 
 .risk-present-card.severity-high .present-risk-heat {
-  border-color: rgba(245, 158, 11, .58);
+  --risk-accent: #f97316;
+  border-color: rgba(249, 115, 22, .64);
 }
 
 .risk-present-card.severity-critical .present-risk-heat {
+  --risk-accent: #ef4444;
   border-color: rgba(239, 71, 111, .58);
 }
 
@@ -1041,17 +1136,56 @@ body.vibe-prismatic .present-business-value::after {
 
 body.vibe-dark .present-screenshot-media,
 body.vibe-dark .present-risk-heat {
-  background: rgba(12, 20, 31, .72);
+  background: rgba(7, 48, 112, .7);
+  border-color: rgba(154, 205, 255, .28);
 }
 
-body.vibe-dark .present-risk-heat strong,
-body.vibe-prismatic .present-risk-heat strong {
+body.vibe-dark .present-risk-heat strong {
   color: #ffffff;
+}
+
+body.vibe-dark .risk-present-card.severity-low .present-risk-heat,
+body.vibe-dark .risk-present-card.severity-medium .present-risk-heat,
+body.vibe-dark .risk-present-card.severity-high .present-risk-heat,
+body.vibe-dark .risk-present-card.severity-critical .present-risk-heat {
+  border-color: rgba(155, 211, 255, .58);
 }
 
 body.vibe-prismatic .present-screenshot-media,
 body.vibe-prismatic .present-risk-heat {
-  background: rgba(16, 17, 43, .62);
+  background:
+    radial-gradient(circle at 92% 10%, rgba(0, 240, 255, .14), transparent 28%),
+    rgba(255, 255, 255, .82);
+  border-color: var(--risk-accent, rgba(0, 174, 239, .42));
+  box-shadow: 0 18px 42px rgba(0, 118, 192, .08);
+}
+
+body.vibe-prismatic .present-risk-heat strong {
+  color: #102032;
+}
+
+body.vibe-prismatic .risk-present-card.severity-low .present-risk-heat {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(47, 191, 113, .16), transparent 28%),
+    rgba(255, 255, 255, .84);
+}
+
+body.vibe-prismatic .risk-present-card.severity-medium .present-risk-heat {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(245, 158, 11, .2), transparent 28%),
+    rgba(255, 255, 255, .84);
+}
+
+body.vibe-prismatic .risk-present-card.severity-high .present-risk-heat {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(249, 115, 22, .2), transparent 28%),
+    rgba(255, 255, 255, .84);
+}
+
+body.vibe-prismatic .risk-present-card.severity-critical .present-risk-heat {
+  background:
+    radial-gradient(circle at 92% 10%, rgba(239, 68, 68, .2), transparent 28%),
+    rgba(255, 255, 255, .84);
 }
 
 .present-readiness-grid {
@@ -1069,8 +1203,15 @@ body.vibe-prismatic .present-risk-heat {
   border-radius: 12px;
   display: grid;
   gap: 16px;
+  grid-template-rows: auto auto 1fr;
   min-height: min(34vh, 320px);
   padding: clamp(18px, 2.4vw, 28px);
+}
+
+.present-readiness-card.is-message-only {
+  align-content: start;
+  grid-template-rows: auto auto auto;
+  min-height: 0;
 }
 
 .present-readiness-card > span {
@@ -1098,19 +1239,53 @@ body.vibe-prismatic .present-risk-heat {
   margin: 0;
 }
 
+.present-readiness-message {
+  background: rgba(248, 252, 255, .82);
+  border: 1px solid rgba(0, 118, 192, .16);
+  border-radius: 12px;
+  padding: clamp(16px, 2vw, 22px);
+}
+
 body.vibe-dark .present-readiness-card {
-  background: rgba(12, 20, 31, .72);
+  background: rgba(7, 48, 112, .72);
+  border-color: rgba(154, 205, 255, .28);
+}
+
+body.vibe-dark .present-readiness-message {
+  background: rgba(224, 243, 255, .1);
+  border-color: rgba(154, 205, 255, .24);
 }
 
 body.vibe-dark .present-readiness-card h3,
-body.vibe-dark .present-readiness-card p,
-body.vibe-prismatic .present-readiness-card h3,
-body.vibe-prismatic .present-readiness-card p {
+body.vibe-dark .present-readiness-card p {
   color: #ffffff;
 }
 
 body.vibe-prismatic .present-readiness-card {
-  background: rgba(16, 17, 43, .62);
+  background:
+    radial-gradient(circle at 90% 8%, rgba(0, 240, 255, .18), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, .82), rgba(232, 250, 255, .66));
+  border-color: rgba(0, 174, 239, .38);
+  box-shadow: 0 18px 42px rgba(0, 118, 192, .08);
+}
+
+body.vibe-prismatic .present-readiness-card.is-message-only {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .72), rgba(225, 247, 255, .58)),
+    rgba(255, 255, 255, .56);
+  border-color: rgba(0, 174, 239, .38);
+}
+
+body.vibe-prismatic .present-readiness-card h3,
+body.vibe-prismatic .present-readiness-card p,
+body.vibe-prismatic .present-readiness-card.is-message-only h3,
+body.vibe-prismatic .present-readiness-card.is-message-only p {
+  color: #102032;
+}
+
+body.vibe-prismatic .present-readiness-message {
+  background: rgba(255, 255, 255, .78);
+  border-color: rgba(0, 118, 192, .18);
 }
 
 .linked-story-list {
@@ -1142,18 +1317,18 @@ body.vibe-prismatic .present-readiness-card {
 }
 
 body.vibe-dark .story-summary-pill {
-  background: rgba(255, 255, 255, .1);
-  border-color: rgba(255, 255, 255, .2);
+  background: rgba(224, 243, 255, .12);
+  border-color: rgba(154, 205, 255, .28);
 }
 
 body.vibe-prismatic .story-summary-pill {
-  background: rgba(16, 17, 43, .86);
+  background: rgba(232, 250, 255, .9);
   border-color: rgba(0, 240, 255, .54);
   box-shadow: 0 0 22px rgba(0, 240, 255, .14);
 }
 
 body.vibe-prismatic .story-summary-pill strong {
-  color: #ffffff;
+  color: #102032;
 }
 
 .linked-story-more {
@@ -1244,6 +1419,20 @@ body.vibe-prismatic .story-summary-pill strong {
   text-align: center;
 }
 
+body.vibe-dark .demo-handoff-slide {
+  background:
+    radial-gradient(circle, rgba(221, 243, 255, .18) 0 2px, transparent 3px) 0 0 / 22px 22px,
+    radial-gradient(circle at 12% 18%, rgba(95, 175, 255, .24), transparent 24%),
+    radial-gradient(circle at 82% 20%, rgba(183, 224, 255, .18), transparent 25%);
+}
+
+body.vibe-dark .demo-handoff-card {
+  background:
+    radial-gradient(circle, rgba(183, 224, 255, .14) 0 2px, transparent 3px) 0 0 / 24px 24px,
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(120deg, rgba(41, 137, 235, .68), rgba(101, 196, 255, .7), rgba(229, 246, 255, .72)) border-box;
+}
+
 .demo-handoff-card h2 {
   margin-bottom: 0;
 }
@@ -1257,13 +1446,26 @@ body.vibe-prismatic .story-summary-pill strong {
 }
 
 .demo-presenter-chips span {
-  background: rgba(255, 255, 255, .72);
-  border: 1px solid var(--line);
+  background: rgba(232, 246, 255, .94);
+  border: 1px solid rgba(0, 118, 192, .28);
   border-radius: 999px;
-  color: var(--ink);
+  box-shadow: 0 12px 30px rgba(0, 48, 96, .16);
+  color: #0b2c47;
   font-size: .9rem;
   font-weight: 850;
   padding: 10px 14px;
+}
+
+body.vibe-dark .demo-presenter-chips span {
+  background: rgba(234, 246, 255, .95);
+  border-color: rgba(155, 211, 255, .55);
+  color: #002868;
+}
+
+body.vibe-prismatic .demo-presenter-chips span {
+  background: rgba(255, 255, 255, .9);
+  border-color: rgba(0, 174, 239, .42);
+  color: #102032;
 }
 
 .demo-handoff-card p,
@@ -1301,6 +1503,13 @@ body.vibe-prismatic .story-summary-pill strong {
     linear-gradient(var(--panel), var(--panel)) padding-box,
     linear-gradient(120deg, rgba(255, 209, 102, .82), rgba(14, 191, 202, .62), rgba(0, 118, 192, .54)) border-box;
   text-align: center;
+}
+
+body.vibe-dark .questions-card {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(183, 224, 255, .24), transparent 34%),
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    linear-gradient(120deg, rgba(229, 246, 255, .72), rgba(101, 196, 255, .62), rgba(41, 137, 235, .54)) border-box;
 }
 
 .questions-card h2 {
@@ -1355,10 +1564,18 @@ body.vibe-prismatic .story-summary-pill strong {
 }
 
 body.vibe-dark .present-controls button {
-  background: rgba(244, 247, 251, .1);
-  border-color: rgba(244, 247, 251, .34);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, .32);
-  color: #f4f7fb;
+  background: rgba(224, 243, 255, .12);
+  border-color: rgba(154, 205, 255, .4);
+  box-shadow: 0 12px 30px rgba(0, 22, 58, .34);
+  color: #eaf6ff;
+}
+
+body.vibe-dark .present-progress {
+  background: rgba(224, 243, 255, .22);
+}
+
+body.vibe-dark .present-progress span {
+  background: linear-gradient(90deg, #1d8de6, #65c4ff, #b7e0ff, #eaf6ff);
 }
 
 body.vibe-prismatic .present-controls button {
@@ -1453,6 +1670,35 @@ body.vibe-prismatic .present-controls button {
   }
 }
 
+@keyframes prismaticParticleDrift {
+  0% {
+    background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 50% 50%;
+    transform: translate3d(-1.2vw, 1vh, 0) scale(1);
+  }
+
+  50% {
+    background-position: 7vw -5vh, -5vw 6vh, 4vw 8vh, -8vw -4vh, 6vw 4vh, -4vw -7vh, 52% 48%;
+    transform: translate3d(1.4vw, -1vh, 0) scale(1.018);
+  }
+
+  100% {
+    background-position: 14vw -10vh, -10vw 12vh, 8vw 16vh, -16vw -8vh, 12vw 8vh, -8vw -14vh, 50% 50%;
+    transform: translate3d(-1.2vw, 1vh, 0) scale(1);
+  }
+}
+
+@keyframes prismaticWarpCurrent {
+  0% {
+    background-position: -24vw 12vh, -18vw 0, 0 0, 0 0;
+    transform: translate3d(-2vw, 0, 0) skewX(-1deg);
+  }
+
+  100% {
+    background-position: 38vw -18vh, 34vw 0, 0 0, 0 0;
+    transform: translate3d(2vw, 0, 0) skewX(-1deg);
+  }
+}
+
 @keyframes borderSweep {
   0% {
     transform: translateX(0);
@@ -1493,6 +1739,12 @@ body.vibe-prismatic .present-controls button {
   .present-business-value::before,
   .present-business-value::after {
     animation: none !important;
+  }
+
+  body.vibe-prismatic::before,
+  body.vibe-prismatic::after {
+    animation: none;
+    transform: none;
   }
 }
 

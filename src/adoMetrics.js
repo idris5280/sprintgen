@@ -100,6 +100,7 @@ function normalizeWorkItem(item) {
     state: getField(item, "System.State", "State") || "Unknown",
     stateCategory: getField(item, "System.StateCategory", "StateCategory") || "",
     type: getField(item, "System.WorkItemType", "WorkItemType") || "Work Item",
+    areaPath: getField(item, "System.AreaPath", "AreaPath") || "",
     storyPoints: storyPoints === null || storyPoints === undefined || storyPoints === "" ? null : asNumber(storyPoints),
     assignedTo: normalizeIdentity(assignedTo),
     createdDate: getField(item, "System.CreatedDate", "CreatedDate") || "",

@@ -12,7 +12,13 @@ const presentationTemplatePath = path.join(projectRoot, "templates", "sprint-dem
 const validPresentationVibes = new Set(["light", "dark", "prismatic"]);
 
 function normalizePresentationVibe(vibe) {
-  return validPresentationVibes.has(vibe) ? vibe : "prismatic";
+  const normalized = String(vibe || "").trim().toLowerCase();
+
+  if (normalized === "blue") {
+    return "dark";
+  }
+
+  return validPresentationVibes.has(normalized) ? normalized : "prismatic";
 }
 
 function toFileUrl(filePath) {
