@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const express = require("express");
 const multer = require("multer");
@@ -20,15 +21,22 @@ const { buildAdoMetrics, findNextIteration, findVelocityIterations, normalizeWor
 
 const app = express();
 const port = process.env.PORT || 3000;
-const runtimeDir = path.join(projectRoot, "runtime");
-const jobsDir = path.join(runtimeDir, "jobs");
-const savedReviewsDir = process.env.SCRUM_STUDIO_DATA_DIR
+const defaultDataRoot = process.env.APPDATA
+  ? path.join(process.env.APPDATA, "ScrumStudio")
+  : path.join(projectRoot, "runtime", "ScrumStudio");
+const fallbackDataRoot = path.join(os.tmpdir(), "ScrumStudio");
+let runtimeDir = process.env.SCRUM_STUDIO_RUNTIME_DIR
+  ? path.resolve(process.env.SCRUM_STUDIO_RUNTIME_DIR)
+  : path.join(defaultDataRoot, "runtime");
+let jobsDir = path.join(runtimeDir, "jobs");
+let savedReviewsDir = process.env.SCRUM_STUDIO_DATA_DIR
   ? path.resolve(process.env.SCRUM_STUDIO_DATA_DIR)
-  : path.join(process.env.APPDATA || runtimeDir, "ScrumStudio", "reviews");
+  : path.join(defaultDataRoot, "reviews");
 const sampleWorkbookPath = path.join(projectRoot, "input", "sample-sprint-demo.xlsx");
 const lobbyDistDir = path.join(projectRoot, "apps", "lobby", "dist");
 const lobbyIndexPath = path.join(lobbyDistDir, "index.html");
 const maxUploadBytes = 8 * 1024 * 1024;
+const maxScreenshotBytes = 5 * 1024 * 1024;
 const maxJobAgeMs = 6 * 60 * 60 * 1000;
 const adoConfig = getAdoConfig();
 const defaultAdoTeam = process.env.ADO_DEFAULT_TEAM || "(Team7) - Sales Value Stream - Vital Signs";
@@ -37,8 +45,22 @@ const adoSessionTtlMs = 4 * 60 * 60 * 1000;
 const adoSessions = new Map();
 
 function ensureRuntimeDirs() {
-  fs.mkdirSync(jobsDir, { recursive: true });
-  fs.mkdirSync(savedReviewsDir, { recursive: true });
+  try {
+    fs.mkdirSync(jobsDir, { recursive: true });
+  } catch (error) {
+    runtimeDir = path.join(fallbackDataRoot, "runtime");
+    jobsDir = path.join(runtimeDir, "jobs");
+    fs.mkdirSync(jobsDir, { recursive: true });
+    console.warn(`Scrum Studio could not write temp jobs to the preferred folder. Using ${jobsDir}.`);
+  }
+
+  try {
+    fs.mkdirSync(savedReviewsDir, { recursive: true });
+  } catch (error) {
+    savedReviewsDir = path.join(fallbackDataRoot, "reviews");
+    fs.mkdirSync(savedReviewsDir, { recursive: true });
+    console.warn(`Scrum Studio could not write saved reviews to the preferred folder. Using ${savedReviewsDir}.`);
+  }
 }
 
 function escapeHtml(value) {
@@ -411,17 +433,37 @@ function storyIdsFromSelection(stories) {
 
 function remapNarrativeStories(narrative, currentItems, nextItems) {
   const currentNarrative = narrative || {};
+  const sections = normalizeNarrativeSections(currentNarrative).map((section) =>
+    section.type === "delivery"
+      ? {
+          ...section,
+          stories: selectStoriesById(currentItems, storyIdsFromSelection(section.stories))
+        }
+      : section.type === "next_steps"
+        ? {
+            ...section,
+            stories: selectStoriesById(nextItems, storyIdsFromSelection(section.stories))
+          }
+      : section
+  );
+  const readiness = normalizeEnvironmentReadiness(currentNarrative);
+  const environmentReadiness = {
+    training: {
+      ...readiness.training,
+      stories: selectStoriesById(currentItems, storyIdsFromSelection(readiness.training.stories))
+    },
+    uat: {
+      ...readiness.uat,
+      stories: selectStoriesById(currentItems, storyIdsFromSelection(readiness.uat.stories))
+    }
+  };
 
   return {
     ...currentNarrative,
-    updates: (currentNarrative.updates || []).map((update) => ({
-      ...update,
-      stories: selectStoriesById(currentItems, storyIdsFromSelection(update.stories))
-    })),
-    nextSteps: {
-      ...(currentNarrative.nextSteps || {}),
-      stories: selectStoriesById(nextItems, storyIdsFromSelection(currentNarrative.nextSteps && currentNarrative.nextSteps.stories))
-    }
+    sections,
+    updates: deliveryUpdatesFromSections(sections),
+    nextSteps: nextStepsFromSections(sections),
+    environmentReadiness
   };
 }
 
@@ -457,7 +499,8 @@ function renderPage({ title, bodyClass = "", content }) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css?v=3">
+  <link rel="stylesheet" href="/assets/styles.css?v=5">
+  <script src="/assets/review-builder.js?v=2" defer></script>
 </head>
 <body class="${escapeHtml(bodyClass)}">
   <div class="confetti-sprinkle" aria-hidden="true"></div>
@@ -998,6 +1041,13 @@ function splitBullets(value) {
     .filter(Boolean);
 }
 
+function splitNames(value) {
+  return String(value || "")
+    .split(/[\r\n,;]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function normalizeIterationForDisplay(iteration) {
   if (!iteration) {
     return null;
@@ -1167,37 +1217,430 @@ function defaultSummaryText(result) {
   return parts.join(" ");
 }
 
-function parseAdoNarrative(body, currentItems, nextItems) {
-  const priorityUpdates = new Set([0, 1, 2].filter((index) => body[`updatePriority${index}`]));
-  const updates = [0, 1, 2]
-    .map((index) => {
-      const title = String(body[`updateTitle${index}`] || "").trim();
-      const bullets = splitBullets(body[`updateBullets${index}`]);
-      const businessValue = String(body[`updateBusinessValue${index}`] || "").trim();
-      const stories = selectStoriesById(currentItems, body[`updateStoryIds${index}`]);
-      const priority = priorityUpdates.has(index);
+function normalizeSectionType(value) {
+  const type = String(value || "").trim().toLowerCase();
+  return ["delivery", "screenshot", "challenge", "risk", "next_steps"].includes(type) ? type : "delivery";
+}
 
-      return {
-        title,
-        bullets,
-        businessValue,
-        stories,
-        priority
-      };
-    })
-    .filter(
-      (update) =>
-        update.title || update.bullets.length > 0 || update.businessValue || update.stories.length > 0 || update.priority
-    );
+function normalizeSectionId(value, index, type = "section") {
+  const clean = String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-  const nextSteps = {
-    title: String(body.nextTitle || "").trim(),
-    bullets: splitBullets(body.nextBullets),
-    stories: selectStoriesById(nextItems, body.nextStoryIds)
+  return clean || `${type}-${index + 1}`;
+}
+
+function normalizeRiskScale(value) {
+  const scale = String(value || "").trim().toLowerCase();
+  return ["low", "medium", "high"].includes(scale) ? scale : "medium";
+}
+
+function normalizeRoamStatus(value) {
+  const status = String(value || "").trim().toLowerCase();
+  return ["resolved", "owned", "accepted", "mitigated"].includes(status) ? status : "owned";
+}
+
+function riskScaleLabel(value) {
+  const labels = {
+    low: "Low",
+    medium: "Medium",
+    high: "High"
   };
+
+  return labels[normalizeRiskScale(value)];
+}
+
+function roamStatusLabel(value) {
+  const labels = {
+    resolved: "Resolved",
+    owned: "Owned",
+    accepted: "Accepted",
+    mitigated: "Mitigated"
+  };
+
+  return labels[normalizeRoamStatus(value)];
+}
+
+function riskSeverity(section) {
+  const scores = {
+    low: 1,
+    medium: 2,
+    high: 3
+  };
+  const score = scores[normalizeRiskScale(section.impact)] * scores[normalizeRiskScale(section.likelihood)];
+
+  if (score >= 7) return "critical";
+  if (score >= 5) return "high";
+  if (score >= 3) return "medium";
+  return "low";
+}
+
+function allowedImageMime(mimeType) {
+  return ["image/png", "image/jpeg", "image/webp", "image/gif"].includes(String(mimeType || "").toLowerCase());
+}
+
+function isReviewImageDataUrl(value) {
+  return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(String(value || ""));
+}
+
+function sectionFieldName(field, id) {
+  return `section_${field}_${id}`;
+}
+
+function sectionLabel(type) {
+  const labels = {
+    delivery: "Delivery Update",
+    screenshot: "Screenshot",
+    challenge: "Challenge",
+    risk: "Risk",
+    next_steps: "Next Steps"
+  };
+
+  return labels[normalizeSectionType(type)];
+}
+
+function sectionIcon(type) {
+  const icons = {
+    delivery: "&#10003;",
+    screenshot: "&#128247;",
+    challenge: "&#9889;",
+    risk: "&#9888;",
+    next_steps: "&#8594;"
+  };
+
+  return icons[normalizeSectionType(type)];
+}
+
+function createDefaultReviewSection(type, index = 0, id = "") {
+  const normalizedType = normalizeSectionType(type);
+  const sectionId = normalizeSectionId(id, index, normalizedType);
+  const base = {
+    id: sectionId,
+    type: normalizedType,
+    title: "",
+    bullets: [],
+    businessValue: ""
+  };
+
+  if (normalizedType === "delivery") {
+    return {
+      ...base,
+      stories: [],
+      priority: false
+    };
+  }
+
+  if (normalizedType === "next_steps") {
+    return {
+      ...base,
+      stories: []
+    };
+  }
+
+  if (normalizedType === "screenshot") {
+    return {
+      ...base,
+      imageData: "",
+      imageName: ""
+    };
+  }
+
+  if (normalizedType === "challenge") {
+    return base;
+  }
+
+  return {
+    ...base,
+    description: "",
+    impact: "medium",
+    likelihood: "medium",
+    roam: "owned",
+    owner: "",
+    notes: ""
+  };
+}
+
+function normalizeReviewSection(section, index = 0) {
+  const source = section || {};
+  const type = normalizeSectionType(source.type);
+  const normalized = createDefaultReviewSection(type, index, source.id);
+
+  normalized.title = String(source.title || "").trim();
+
+  if (type === "risk") {
+    normalized.description = String(source.description || "").trim();
+    normalized.impact = normalizeRiskScale(source.impact);
+    normalized.likelihood = normalizeRiskScale(source.likelihood);
+    normalized.roam = normalizeRoamStatus(source.roam || source.status);
+    normalized.owner = String(source.owner || "").trim();
+    normalized.notes = String(source.notes || "").trim();
+    return normalized;
+  }
+
+  normalized.bullets = Array.isArray(source.bullets) ? source.bullets.map((bullet) => String(bullet || "").trim()).filter(Boolean) : [];
+  normalized.businessValue = String(source.businessValue || "").trim();
+
+  if (type === "delivery") {
+    normalized.stories = Array.isArray(source.stories) ? source.stories : [];
+    normalized.priority = Boolean(source.priority);
+  }
+
+  if (type === "next_steps") {
+    normalized.stories = Array.isArray(source.stories) ? source.stories : [];
+  }
+
+  if (type === "screenshot") {
+    normalized.imageData = isReviewImageDataUrl(source.imageData) ? source.imageData : "";
+    normalized.imageName = String(source.imageName || "").trim();
+  }
+
+  return normalized;
+}
+
+function reviewSectionHasContent(section) {
+  if (!section) return false;
+
+  if (section.type === "risk") {
+    return Boolean(section.title || section.description || section.owner || section.notes);
+  }
+
+  if (section.type === "screenshot") {
+    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.imageData);
+  }
+
+  if (section.type === "delivery") {
+    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.stories.length > 0 || section.priority);
+  }
+
+  if (section.type === "next_steps") {
+    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.stories.length > 0);
+  }
+
+  return Boolean(section.title || section.bullets.length > 0 || section.businessValue);
+}
+
+function normalizeNarrativeSections(narrative) {
+  const currentNarrative = narrative || {};
+  const rawSections = Array.isArray(currentNarrative.sections)
+    ? currentNarrative.sections
+    : (currentNarrative.updates || []).map((update) => ({
+        ...update,
+        type: "delivery"
+      }));
+
+  const sections = rawSections.map(normalizeReviewSection).filter(reviewSectionHasContent);
+  const legacyNextSteps = normalizeReviewSection(
+    {
+      id: "next-steps-legacy",
+      type: "next_steps",
+      title: currentNarrative.nextSteps && currentNarrative.nextSteps.title,
+      bullets: currentNarrative.nextSteps && currentNarrative.nextSteps.bullets,
+      stories: currentNarrative.nextSteps && currentNarrative.nextSteps.stories
+    },
+    sections.length
+  );
+
+  if (!sections.some((section) => section.type === "next_steps") && reviewSectionHasContent(legacyNextSteps)) {
+    sections.push(legacyNextSteps);
+  }
+
+  return sections;
+}
+
+function sectionsForBuilder(narrative) {
+  const sections = normalizeNarrativeSections(narrative);
+  return sections.length > 0
+    ? sections
+    : [createDefaultReviewSection("delivery", 0, "delivery-1"), createDefaultReviewSection("next_steps", 1, "next-steps-1")];
+}
+
+function deliveryUpdatesFromSections(sections) {
+  return (sections || []).filter((section) => section.type === "delivery");
+}
+
+function nextStepsFromSections(sections) {
+  const section = (sections || []).find((candidate) => candidate.type === "next_steps");
+
+  if (!section) {
+    return {
+      title: "",
+      bullets: [],
+      stories: []
+    };
+  }
+
+  return {
+    title: section.title || "",
+    bullets: Array.isArray(section.bullets) ? section.bullets : [],
+    stories: Array.isArray(section.stories) ? section.stories : []
+  };
+}
+
+function normalizeReadinessAudience(value, fallback = {}) {
+  const source = value || {};
+  const stories = Array.isArray(source.stories) ? source.stories : [];
+
+  return {
+    enabled: Boolean(source.enabled || source.ready || stories.length > 0),
+    stories,
+    message: String(source.message || fallback.message || "").trim()
+  };
+}
+
+function normalizeEnvironmentReadiness(narrative) {
+  const readiness = (narrative && narrative.environmentReadiness) || {};
+
+  return {
+    training: normalizeReadinessAudience(readiness.training, {
+      message: "We have items ready to go into the training environment."
+    }),
+    uat: normalizeReadinessAudience(readiness.uat, {
+      message: "We have items ready to go into UAT."
+    })
+  };
+}
+
+function environmentReadinessHasContent(readiness) {
+  const normalized = normalizeEnvironmentReadiness({ environmentReadiness: readiness });
+  return Boolean(normalized.training.enabled || normalized.uat.enabled);
+}
+
+function parseEnvironmentReadiness(body, currentItems, previousNarrative = {}) {
+  const previous = normalizeEnvironmentReadiness(previousNarrative);
+  const trainingStories = selectStoriesById(currentItems, body.readinessTrainingStoryIds);
+  const uatStories = selectStoriesById(currentItems, body.readinessUatStoryIds);
+
+  return {
+    training: {
+      enabled: Boolean(body.readinessTrainingEnabled) || trainingStories.length > 0,
+      stories: trainingStories,
+      message: String(body.readinessTrainingMessage || previous.training.message || "We have items ready to go into the training environment.").trim()
+    },
+    uat: {
+      enabled: Boolean(body.readinessUatEnabled) || uatStories.length > 0,
+      stories: uatStories,
+      message: String(body.readinessUatMessage || previous.uat.message || "We have items ready to go into UAT.").trim()
+    }
+  };
+}
+
+function previousSectionsById(narrative) {
+  return new Map(normalizeNarrativeSections(narrative).map((section) => [section.id, section]));
+}
+
+function findUploadedImage(files, fieldName) {
+  return (files || []).find((file) => file.fieldname === fieldName && file.buffer && file.size > 0) || null;
+}
+
+function uploadedImageToDataUrl(file) {
+  if (!file || !allowedImageMime(file.mimetype)) {
+    return "";
+  }
+
+  return `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+}
+
+function parseSectionFromRequest({ body, files, id, index, currentItems, nextItems, previousSections }) {
+  const type = normalizeSectionType(body[sectionFieldName("type", id)]);
+  const section = createDefaultReviewSection(type, index, id);
+
+  section.title = String(body[sectionFieldName("title", id)] || "").trim();
+
+  if (type === "risk") {
+    section.description = String(body[sectionFieldName("description", id)] || "").trim();
+    section.impact = normalizeRiskScale(body[sectionFieldName("impact", id)]);
+    section.likelihood = normalizeRiskScale(body[sectionFieldName("likelihood", id)]);
+    section.roam = normalizeRoamStatus(body[sectionFieldName("roam", id)]);
+    section.owner = String(body[sectionFieldName("owner", id)] || "").trim();
+    section.notes = String(body[sectionFieldName("notes", id)] || "").trim();
+    return section;
+  }
+
+  section.bullets = splitBullets(body[sectionFieldName("bullets", id)]);
+  section.businessValue = String(body[sectionFieldName("businessValue", id)] || "").trim();
+
+  if (type === "delivery") {
+    section.priority = Boolean(body[sectionFieldName("priority", id)]);
+    section.stories = selectStoriesById(currentItems, body[sectionFieldName("storyIds", id)]);
+  }
+
+  if (type === "next_steps") {
+    section.stories = selectStoriesById(nextItems, body[sectionFieldName("storyIds", id)]);
+  }
+
+  if (type === "screenshot") {
+    const imageFile = findUploadedImage(files, sectionFieldName("image", id));
+    const previous = previousSections.get(id);
+    const removeImage = Boolean(body[sectionFieldName("imageRemove", id)]);
+
+    section.imageData = removeImage ? "" : uploadedImageToDataUrl(imageFile) || (previous && previous.imageData) || "";
+    section.imageName = imageFile ? String(imageFile.originalname || "").trim() : (previous && previous.imageName) || "";
+  }
+
+  return section;
+}
+
+function parseLegacyDeliveryUpdates(body, currentItems) {
+  const priorityUpdates = new Set([0, 1, 2].filter((index) => body[`updatePriority${index}`]));
+
+  return [0, 1, 2]
+    .map((index) =>
+      normalizeReviewSection(
+        {
+          id: `delivery-${index + 1}`,
+          type: "delivery",
+          title: String(body[`updateTitle${index}`] || "").trim(),
+          bullets: splitBullets(body[`updateBullets${index}`]),
+          businessValue: String(body[`updateBusinessValue${index}`] || "").trim(),
+          stories: selectStoriesById(currentItems, body[`updateStoryIds${index}`]),
+          priority: priorityUpdates.has(index)
+        },
+        index
+      )
+    )
+    .filter(reviewSectionHasContent);
+}
+
+function parseReviewSections(body, currentItems, nextItems, files, previousNarrative) {
+  const sectionIds = asArray(body.sectionIds).map((id, index) => normalizeSectionId(id, index)).filter(Boolean);
+
+  if (sectionIds.length === 0) {
+    return parseLegacyDeliveryUpdates(body, currentItems);
+  }
+
+  const previousSections = previousSectionsById(previousNarrative);
+  return sectionIds
+    .map((id, index) =>
+      parseSectionFromRequest({
+        body,
+        files,
+        id,
+        index,
+        currentItems,
+        nextItems,
+        previousSections
+      })
+    )
+    .filter(reviewSectionHasContent);
+}
+
+function parseAdoNarrative(body, currentItems, nextItems, files = [], previousNarrative = {}) {
+  const sections = parseReviewSections(body, currentItems, nextItems, files, previousNarrative);
+
+  const sectionNextSteps = nextStepsFromSections(sections);
+  const nextSteps = reviewSectionHasContent({ ...sectionNextSteps, type: "next_steps" })
+    ? sectionNextSteps
+    : {
+        title: String(body.nextTitle || "").trim(),
+        bullets: splitBullets(body.nextBullets),
+        stories: selectStoriesById(nextItems, body.nextStoryIds)
+      };
   const demo = {
     enabled: Boolean(body.hasDemo),
     title: String(body.demoTitle || "").trim(),
+    presenters: splitNames(body.demoPresenters),
     note: String(body.demoNote || "").trim()
   };
 
@@ -1205,9 +1648,11 @@ function parseAdoNarrative(body, currentItems, nextItems) {
     summary: String(body.summary || "").trim(),
     openingTitle: String(body.openingTitle || "Opening Remarks").trim(),
     openingSubtitle: String(body.openingSubtitle || "").trim(),
-    updates,
+    sections,
+    updates: deliveryUpdatesFromSections(sections),
     demo,
-    nextSteps
+    nextSteps,
+    environmentReadiness: parseEnvironmentReadiness(body, currentItems, previousNarrative)
   };
 }
 
@@ -1253,6 +1698,310 @@ async function buildAdoReviewDraft({ pat, team, sprint, areaPath = "" }) {
   };
 }
 
+function renderSectionSelect(name, value, options) {
+  return `
+    <select class="text-input" name="${escapeHtml(name)}">
+      ${options
+        .map(
+          (option) => `
+            <option value="${escapeHtml(option.value)}"${option.value === value ? " selected" : ""}>${escapeHtml(option.label)}</option>
+          `
+        )
+        .join("")}
+    </select>
+  `;
+}
+
+function renderSectionControls(section, index) {
+  const type = normalizeSectionType(section.type);
+  const descriptions = {
+    delivery: "Tell the delivery story",
+    screenshot: "Show and explain a visual",
+    challenge: "Capture a challenge",
+    risk: "Track a ROAM risk",
+    next_steps: "Preview what comes next"
+  };
+
+  return `
+    <div class="section-editor-topline">
+      <div class="section-editor-title-row">
+        <span class="section-icon" aria-hidden="true">${sectionIcon(type)}</span>
+        <div>
+          <span class="section-kicker">${escapeHtml(sectionLabel(type))} <em data-section-number>${escapeHtml(index + 1)}</em></span>
+          <strong>${escapeHtml(descriptions[type] || descriptions.delivery)}</strong>
+        </div>
+      </div>
+      <div class="section-editor-actions">
+        <button class="ghost-button compact" type="button" data-section-move="up">Up</button>
+        <button class="ghost-button compact" type="button" data-section-move="down">Down</button>
+        <button class="ghost-button compact danger" type="button" data-section-remove>Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCommonSectionFields(section) {
+  const id = section.id;
+  const placeholders = {
+    delivery: "Example: Enrollment workflow is ready for demo",
+    screenshot: "Example: Dashboard view is ready for feedback",
+    challenge: "Example: Vendor dependency slowed validation",
+    risk: "Example: Integration timeline may slip",
+    next_steps: "Example: Sprint 38 focus"
+  };
+
+  return `
+    <input type="hidden" name="sectionIds" value="${escapeHtml(id)}">
+    <input type="hidden" name="${escapeHtml(sectionFieldName("type", id))}" value="${escapeHtml(section.type)}">
+    <label class="field-group" for="${escapeHtml(sectionFieldName("title", id))}">
+      <span>Title</span>
+      <input class="text-input" id="${escapeHtml(sectionFieldName("title", id))}" name="${escapeHtml(sectionFieldName("title", id))}" type="text" value="${escapeHtml(section.title || "")}" placeholder="${escapeHtml(placeholders[normalizeSectionType(section.type)] || placeholders.delivery)}">
+    </label>
+  `;
+}
+
+function renderDeliverySectionEditor(section, draft) {
+  const id = section.id;
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <div class="delivery-card-topline section-subline">
+      <span>Delivery detail</span>
+      <label class="priority-check">
+        <input type="checkbox" name="${escapeHtml(sectionFieldName("priority", id))}" value="yes"${section.priority ? " checked" : ""}>
+        <span>#1 priority</span>
+      </label>
+    </div>
+    <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
+      <span>Bullet points</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+    </label>
+    <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
+      <span>Business value</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this mattered for users, stakeholders, or operations">${escapeHtml(section.businessValue || "")}</textarea>
+    </label>
+    ${renderStoryPicker({
+      title: "Attach selected sprint ADO stories",
+      name: sectionFieldName("storyIds", id),
+      items: draft.currentItems,
+      emptyText: "No stories or bugs were found for this sprint.",
+      selectedIds: storyIdsFromSelection(section.stories)
+    })}
+  `;
+}
+
+function renderScreenshotSectionEditor(section) {
+  const id = section.id;
+  const hasImage = Boolean(section.imageData);
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <div class="screenshot-editor-grid">
+      <div class="screenshot-drop-zone" tabindex="0" data-screenshot-drop>
+        <input type="hidden" name="${escapeHtml(sectionFieldName("imageRemove", id))}" value="" data-screenshot-remove>
+        <input class="text-input" type="file" name="${escapeHtml(sectionFieldName("image", id))}" accept="image/png,image/jpeg,image/webp,image/gif" data-screenshot-input>
+        <div class="screenshot-preview${hasImage ? " has-image" : ""}" data-screenshot-preview>
+          ${hasImage ? `<img src="${escapeHtml(section.imageData)}" alt="${escapeHtml(section.title || "Uploaded screenshot")}">` : `<span>Paste, drop, or choose a screenshot</span>`}
+        </div>
+        <button class="ghost-button compact" type="button" data-screenshot-clear${hasImage ? "" : " hidden"}>Remove image</button>
+      </div>
+      <div class="screenshot-copy-fields">
+        <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
+          <span>Side bullets</span>
+          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+        </label>
+        <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
+          <span>Business value</span>
+          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this screenshot matters">${escapeHtml(section.businessValue || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function renderChallengeSectionEditor(section) {
+  const id = section.id;
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
+      <span>Challenge bullets</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="One challenge or learning per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+    </label>
+    <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
+      <span>Impact or response</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="How the team responded or what stakeholders should know">${escapeHtml(section.businessValue || "")}</textarea>
+    </label>
+  `;
+}
+
+function renderRiskSectionEditor(section) {
+  const id = section.id;
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <label class="field-group" for="${escapeHtml(sectionFieldName("description", id))}">
+      <span>Description</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("description", id))}" name="${escapeHtml(sectionFieldName("description", id))}" rows="3" placeholder="What could happen and why it matters">${escapeHtml(section.description || "")}</textarea>
+    </label>
+    <div class="risk-editor-grid">
+      <label class="field-group">
+        <span>Impact</span>
+        ${renderSectionSelect(sectionFieldName("impact", id), normalizeRiskScale(section.impact), [
+          { value: "low", label: "Low" },
+          { value: "medium", label: "Medium" },
+          { value: "high", label: "High" }
+        ])}
+      </label>
+      <label class="field-group">
+        <span>Likelihood</span>
+        ${renderSectionSelect(sectionFieldName("likelihood", id), normalizeRiskScale(section.likelihood), [
+          { value: "low", label: "Low" },
+          { value: "medium", label: "Medium" },
+          { value: "high", label: "High" }
+        ])}
+      </label>
+      <label class="field-group">
+        <span>ROAM</span>
+        ${renderSectionSelect(sectionFieldName("roam", id), normalizeRoamStatus(section.roam), [
+          { value: "resolved", label: "Resolved" },
+          { value: "owned", label: "Owned" },
+          { value: "accepted", label: "Accepted" },
+          { value: "mitigated", label: "Mitigated" }
+        ])}
+      </label>
+    </div>
+    <div class="risk-editor-grid two">
+      <label class="field-group" for="${escapeHtml(sectionFieldName("owner", id))}">
+        <span>Owner</span>
+        <input class="text-input" id="${escapeHtml(sectionFieldName("owner", id))}" name="${escapeHtml(sectionFieldName("owner", id))}" type="text" value="${escapeHtml(section.owner || "")}" placeholder="Example: Product owner">
+      </label>
+      <label class="field-group" for="${escapeHtml(sectionFieldName("notes", id))}">
+        <span>Notes</span>
+        <input class="text-input" id="${escapeHtml(sectionFieldName("notes", id))}" name="${escapeHtml(sectionFieldName("notes", id))}" type="text" value="${escapeHtml(section.notes || "")}" placeholder="Example: Mitigation plan is in motion">
+      </label>
+    </div>
+  `;
+}
+
+function renderNextStepsSectionEditor(section, draft) {
+  const id = section.id;
+
+  return `
+    ${renderCommonSectionFields(section)}
+    <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
+      <span>Next steps bullets</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+    </label>
+    <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
+      <span>Context for stakeholders</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this is the right next focus">${escapeHtml(section.businessValue || "")}</textarea>
+    </label>
+    ${renderStoryPicker({
+      title: "Attach next sprint ADO stories",
+      name: sectionFieldName("storyIds", id),
+      items: draft.nextWorkItems.items,
+      emptyText: "No next sprint stories were found or the next iteration is not configured for this team.",
+      selectedIds: storyIdsFromSelection(section.stories)
+    })}
+  `;
+}
+
+function renderReadinessAudienceEditor({ key, label, description, checked, message, stories, items }) {
+  const enabledName = key === "training" ? "readinessTrainingEnabled" : "readinessUatEnabled";
+  const storyName = key === "training" ? "readinessTrainingStoryIds" : "readinessUatStoryIds";
+  const messageName = key === "training" ? "readinessTrainingMessage" : "readinessUatMessage";
+
+  return `
+    <article class="readiness-audience-card">
+      <label class="demo-check">
+        <input type="checkbox" name="${escapeHtml(enabledName)}" value="yes"${checked ? " checked" : ""}>
+        <span>
+          <strong>${escapeHtml(label)}</strong>
+          <small>${escapeHtml(description)}</small>
+        </span>
+      </label>
+      <label class="field-group" for="${escapeHtml(messageName)}">
+        <span>Fallback message when no stories are selected</span>
+        <input class="text-input" id="${escapeHtml(messageName)}" name="${escapeHtml(messageName)}" type="text" value="${escapeHtml(message)}" placeholder="${escapeHtml(key === "training" ? "We have items ready to go into the training environment." : "We have items ready to go into UAT.")}">
+      </label>
+      ${renderStoryPicker({
+        title: `Choose specific stories for ${label}`,
+        name: storyName,
+        items,
+        emptyText: "No current sprint stories were found for this review.",
+        selectedIds: storyIdsFromSelection(stories)
+      })}
+    </article>
+  `;
+}
+
+function renderEnvironmentReadinessEditor(readiness, draft) {
+  const normalized = normalizeEnvironmentReadiness({ environmentReadiness: readiness });
+
+  return `
+    <section class="narrative-section readiness-builder-section">
+      <div class="section-heading-row">
+        <div>
+          <span>Stakeholder readiness</span>
+          <h2>What this means for you</h2>
+        </div>
+        <small>Show Training and UAT what they should prepare for after the review.</small>
+      </div>
+      <div class="readiness-editor-grid">
+        ${renderReadinessAudienceEditor({
+          key: "training",
+          label: "Training Environment",
+          description: "Stories expected to move into training so materials can be prepared.",
+          checked: normalized.training.enabled,
+          message: normalized.training.message,
+          stories: normalized.training.stories,
+          items: draft.currentItems
+        })}
+        ${renderReadinessAudienceEditor({
+          key: "uat",
+          label: "UAT",
+          description: "Stories or features expected to need UAT preparation and test planning.",
+          checked: normalized.uat.enabled,
+          message: normalized.uat.message,
+          stories: normalized.uat.stories,
+          items: draft.currentItems
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function renderReviewSectionEditor(section, index, draft) {
+  const normalizedSection = normalizeReviewSection(section, typeof index === "number" ? index : 0);
+  const type = normalizedSection.type;
+  const body =
+    type === "screenshot"
+      ? renderScreenshotSectionEditor(normalizedSection)
+      : type === "challenge"
+        ? renderChallengeSectionEditor(normalizedSection)
+        : type === "risk"
+          ? renderRiskSectionEditor(normalizedSection)
+          : type === "next_steps"
+            ? renderNextStepsSectionEditor(normalizedSection, draft)
+            : renderDeliverySectionEditor(normalizedSection, draft);
+
+  return `
+    <article class="delivery-editor-card review-section-card section-type-${escapeHtml(type)}" data-review-section>
+      ${renderSectionControls(normalizedSection, typeof index === "number" ? index : 0)}
+      ${body}
+    </article>
+  `;
+}
+
+function renderReviewSectionTemplate(type, draft) {
+  return `
+    <template data-section-template="${escapeHtml(type)}">
+      ${renderReviewSectionEditor(createDefaultReviewSection(type, 0, "__SECTION_ID__"), 0, draft)}
+    </template>
+  `;
+}
+
 function renderAdoReviewBuilderContent({
   draft,
   error = null,
@@ -1280,16 +2029,15 @@ function renderAdoReviewBuilderContent({
   const result = draft.result;
   const metrics = result.metrics || {};
   const totals = metrics.totals || {};
-  const nextLabel = draft.nextIteration ? draft.nextIteration.name : "Next sprint";
   const currentNarrative = narrative || {};
-  const narrativeUpdates = Array.isArray(currentNarrative.updates) ? currentNarrative.updates : [];
-  const nextSteps = currentNarrative.nextSteps || {};
+  const reviewSections = sectionsForBuilder(currentNarrative);
+  const readiness = normalizeEnvironmentReadiness(currentNarrative);
   const demo = currentNarrative.demo || {};
   const openingTitle = currentNarrative.openingTitle || "Opening Remarks";
   const openingSubtitle = currentNarrative.openingSubtitle || "";
   const summaryText = currentNarrative.summary || defaultSummaryText(result);
-  const nextTitle = nextSteps.title || `${nextLabel} focus`;
-  const nextBullets = Array.isArray(nextSteps.bullets) ? nextSteps.bullets.join("\n") : "";
+  const demoTitle = demo.title || "Live Demo";
+  const demoPresenters = Array.isArray(demo.presenters) ? demo.presenters.join("\n") : "";
   const demoNote = demo.note || "";
   const backLinkHref =
     backHref || `/ado-admin?team=${encodeURIComponent(result.team)}&areaPath=${encodeURIComponent(result.areaPath || "")}`;
@@ -1322,7 +2070,7 @@ function renderAdoReviewBuilderContent({
         </div>
       </section>
 
-      <form class="story-builder-form" action="${escapeHtml(action)}" method="post">
+      <form class="story-builder-form" action="${escapeHtml(action)}" method="post" enctype="multipart/form-data" data-review-builder-form>
         <input type="hidden" name="team" value="${escapeHtml(result.team)}">
         <input type="hidden" name="sprint" value="${escapeHtml(result.iteration.path)}">
         <input type="hidden" name="areaPath" value="${escapeHtml(result.areaPath || "")}">
@@ -1351,53 +2099,27 @@ function renderAdoReviewBuilderContent({
           </label>
         </section>
 
-        <section class="narrative-section">
+        <section class="narrative-section review-sections-builder">
           <div class="section-heading-row">
             <div>
-              <span>Delivery updates</span>
-              <h2>Group the sprint work into stakeholder-ready updates</h2>
+              <span>Review sections</span>
+              <h2>Build the stakeholder story section by section</h2>
             </div>
-            <small>Select the ADO stories that support each update.</small>
+            <small>Add delivery updates, screenshots, challenges, risks, or next steps in the order you want them presented.</small>
           </div>
 
-          <div class="delivery-editor-grid">
-            ${[0, 1, 2]
-              .map((index) => {
-                const update = narrativeUpdates[index] || {};
-                const updateBullets = Array.isArray(update.bullets) ? update.bullets.join("\n") : "";
-                return `
-                  <article class="delivery-editor-card">
-                    <div class="delivery-card-topline">
-                      <span>Update ${index + 1}</span>
-                      <label class="priority-check">
-                        <input type="checkbox" name="updatePriority${index}" value="yes"${update.priority ? " checked" : ""}>
-                        <span>#1 priority</span>
-                      </label>
-                    </div>
-                    <label class="field-group" for="updateTitle${index}">
-                      <span>Title</span>
-                      <input class="text-input" id="updateTitle${index}" name="updateTitle${index}" type="text" value="${escapeHtml(update.title || "")}" placeholder="Example: Enrollment workflow is ready for demo">
-                    </label>
-                    <label class="field-group" for="updateBullets${index}">
-                      <span>Bullet points</span>
-                      <textarea class="text-input narrative-textarea" id="updateBullets${index}" name="updateBullets${index}" rows="4" placeholder="One bullet per line">${escapeHtml(updateBullets)}</textarea>
-                    </label>
-                    <label class="field-group" for="updateBusinessValue${index}">
-                      <span>Business value</span>
-                      <textarea class="text-input narrative-textarea" id="updateBusinessValue${index}" name="updateBusinessValue${index}" rows="3" placeholder="Why this mattered for users, stakeholders, or operations">${escapeHtml(update.businessValue || "")}</textarea>
-                    </label>
-                    ${renderStoryPicker({
-                      title: "Attach selected sprint ADO stories",
-                      name: `updateStoryIds${index}`,
-                      items: draft.currentItems,
-                      emptyText: "No stories or bugs were found for this sprint.",
-                      selectedIds: storyIdsFromSelection(update.stories)
-                    })}
-                  </article>
-                `;
-              })
-              .join("")}
+          <div class="section-add-row" aria-label="Add review section">
+            <button class="secondary-button" type="button" data-add-section="delivery">Delivery Update</button>
+            <button class="secondary-button" type="button" data-add-section="screenshot">Screenshot</button>
+            <button class="secondary-button" type="button" data-add-section="challenge">Challenge</button>
+            <button class="secondary-button" type="button" data-add-section="risk">Risk</button>
+            <button class="secondary-button" type="button" data-add-section="next_steps">Next Steps</button>
           </div>
+
+          <div class="delivery-editor-grid review-section-list" data-section-list>
+            ${reviewSections.map((section, index) => renderReviewSectionEditor(section, index, draft)).join("")}
+          </div>
+          ${["delivery", "screenshot", "challenge", "risk", "next_steps"].map((type) => renderReviewSectionTemplate(type, draft)).join("")}
         </section>
 
         <section class="narrative-section demo-builder-section">
@@ -1417,42 +2139,24 @@ function renderAdoReviewBuilderContent({
                 <small>Add a clean Live Demo slide to pause the recap.</small>
               </span>
             </label>
+            <div class="demo-copy-grid">
+              <label class="field-group" for="demoTitle">
+                <span>Demo slide title</span>
+                <input class="text-input" id="demoTitle" name="demoTitle" type="text" value="${escapeHtml(demoTitle)}" placeholder="Example: Product Demo">
+              </label>
+              <label class="field-group" for="demoPresenters">
+                <span>Presenter names</span>
+                <textarea class="text-input narrative-textarea" id="demoPresenters" name="demoPresenters" rows="3" placeholder="One presenter per line">${escapeHtml(demoPresenters)}</textarea>
+              </label>
+            </div>
             <label class="field-group" for="demoNote">
-              <span>Optional internal demo note</span>
+              <span>Demo note</span>
               <textarea class="text-input narrative-textarea" id="demoNote" name="demoNote" rows="3" placeholder="Example: Product owner will demo the workflow.">${escapeHtml(demoNote)}</textarea>
             </label>
           </div>
         </section>
 
-        <section class="narrative-section">
-          <div class="section-heading-row">
-            <div>
-              <span>Looking ahead</span>
-              <h2>Pick the next sprint work worth previewing</h2>
-            </div>
-            <small>${draft.nextIteration ? `${escapeHtml(draft.nextIteration.path)}` : "Scrum Studio could not find the next team iteration automatically."}</small>
-          </div>
-
-          <div class="next-editor-grid">
-            <div class="next-editor-copy">
-              <label class="field-group" for="nextTitle">
-                <span>Next steps title</span>
-                <input class="text-input" id="nextTitle" name="nextTitle" type="text" value="${escapeHtml(nextTitle)}" placeholder="Example: What we are lining up next">
-              </label>
-              <label class="field-group" for="nextBullets">
-                <span>Next steps bullets</span>
-                <textarea class="text-input narrative-textarea" id="nextBullets" name="nextBullets" rows="5" placeholder="One bullet per line">${escapeHtml(nextBullets)}</textarea>
-              </label>
-            </div>
-            ${renderStoryPicker({
-              title: "Attach next sprint ADO stories",
-              name: "nextStoryIds",
-              items: draft.nextWorkItems.items,
-              emptyText: "No next sprint stories were found or the next iteration is not configured for this team.",
-              selectedIds: storyIdsFromSelection(nextSteps.stories)
-            })}
-          </div>
-        </section>
+        ${renderEnvironmentReadinessEditor(readiness, draft)}
 
         <section class="builder-submit-panel">
           <div>
@@ -1463,28 +2167,6 @@ function renderAdoReviewBuilderContent({
           <button class="primary-button" type="submit">${escapeHtml(submitLabel)}</button>
         </section>
       </form>
-
-      <script>
-        document.querySelectorAll("[data-story-picker]").forEach(function (picker) {
-          var total = picker.querySelector("[data-picker-total]");
-          var inputs = Array.prototype.slice.call(picker.querySelectorAll("input[type='checkbox']"));
-
-          function updateTotal() {
-            var selected = inputs.filter(function (input) { return input.checked; });
-            var points = selected.reduce(function (sum, input) {
-              var value = Number(input.getAttribute("data-points") || 0);
-              return sum + (Number.isFinite(value) ? value : 0);
-            }, 0);
-
-            if (total) {
-              total.textContent = selected.length + " selected / " + points.toLocaleString("en-US", { maximumFractionDigits: 1 }) + " pts";
-            }
-          }
-
-          picker.addEventListener("change", updateTotal);
-          updateTotal();
-        });
-      </script>
     `;
 }
 
@@ -1514,40 +2196,162 @@ function renderAdoReviewBuilderPage({
   });
 }
 
-function renderAdoDeliveryUpdates(updates) {
-  if (!updates || updates.length === 0) {
-    return `<div class="empty-state">No delivery updates were added. Return to the builder to add stakeholder-facing context.</div>`;
+function renderAdoReportBusinessValue(value) {
+  return value ? `<div class="business-value-box"><span>Business value</span><p>${escapeHtml(value)}</p></div>` : "";
+}
+
+function renderAdoReportDeliverySection(section, index) {
+  return `
+    <article class="ado-report-update-card${section.priority ? " priority" : ""}">
+      <div class="update-card-heading">
+        <h3>${escapeHtml(section.title || `Delivery update ${index + 1}`)}</h3>
+        ${section.priority ? `<span>#1 priority</span>` : ""}
+      </div>
+      ${renderBulletList(section.bullets, "No bullet points were added for this update.")}
+      ${renderAdoReportBusinessValue(section.businessValue)}
+      ${
+        section.stories && section.stories.length > 0
+          ? `<div class="story-evidence">
+              ${renderStoryChips(section.stories)}
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
+
+function renderAdoReportScreenshotSection(section) {
+  return `
+    <article class="ado-report-special-card screenshot-report-card">
+      <div class="section-special-heading">
+        <span aria-hidden="true">${sectionIcon("screenshot")}</span>
+        <div>
+          <small>Screenshot</small>
+          <h3>${escapeHtml(section.title || "Screenshot")}</h3>
+        </div>
+      </div>
+      <div class="screenshot-report-layout">
+        <div class="screenshot-report-media">
+          ${section.imageData ? `<img src="${escapeHtml(section.imageData)}" alt="${escapeHtml(section.title || "Review screenshot")}">` : `<div class="empty-state">No screenshot was added.</div>`}
+        </div>
+        <div class="screenshot-report-copy">
+          ${renderBulletList(section.bullets, "No screenshot notes were added.")}
+          ${renderAdoReportBusinessValue(section.businessValue)}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderAdoReportChallengeSection(section) {
+  return `
+    <article class="ado-report-special-card challenge-report-card">
+      <div class="section-special-heading">
+        <span aria-hidden="true">${sectionIcon("challenge")}</span>
+        <div>
+          <small>Challenge</small>
+          <h3>${escapeHtml(section.title || "Challenge")}</h3>
+        </div>
+      </div>
+      ${renderBulletList(section.bullets, "No challenge notes were added.")}
+      ${renderAdoReportBusinessValue(section.businessValue)}
+    </article>
+  `;
+}
+
+function renderAdoReportRiskSection(section) {
+  const severity = riskSeverity(section);
+
+  return `
+    <article class="ado-report-special-card risk-report-card severity-${escapeHtml(severity)}">
+      <div class="section-special-heading">
+        <span aria-hidden="true">${sectionIcon("risk")}</span>
+        <div>
+          <small>Risk</small>
+          <h3>${escapeHtml(section.title || "Risk")}</h3>
+        </div>
+      </div>
+      ${section.description ? `<p>${escapeHtml(section.description)}</p>` : `<p>No risk description was added.</p>`}
+      <div class="risk-heatmap-row">
+        <span>Impact: ${escapeHtml(riskScaleLabel(section.impact))}</span>
+        <span>Likelihood: ${escapeHtml(riskScaleLabel(section.likelihood))}</span>
+        <span>ROAM: ${escapeHtml(roamStatusLabel(section.roam))}</span>
+      </div>
+      ${
+        section.owner || section.notes
+          ? `<div class="risk-owner-notes">
+              ${section.owner ? `<span>Owner: ${escapeHtml(section.owner)}</span>` : ""}
+              ${section.notes ? `<span>${escapeHtml(section.notes)}</span>` : ""}
+            </div>`
+          : ""
+      }
+    </article>
+  `;
+}
+
+function renderAdoReportNextStepsSection(section, nextIteration) {
+  return `
+    <article class="ado-report-special-card next-report-card">
+      <div class="section-special-heading">
+        <span aria-hidden="true">${sectionIcon("next_steps")}</span>
+        <div>
+          <small>${escapeHtml(nextIteration ? nextIteration.name : "Looking ahead")}</small>
+          <h3>${escapeHtml(section.title || "What is lining up next")}</h3>
+        </div>
+      </div>
+      <div class="ado-report-next-grid${section.stories && section.stories.length > 0 ? "" : " single"}">
+        <div class="next-copy-panel">
+          ${renderBulletList(section.bullets, "No next-step bullets were added.")}
+          ${renderAdoReportBusinessValue(section.businessValue)}
+        </div>
+        ${
+          section.stories && section.stories.length > 0
+            ? `<div class="story-evidence">
+                <span>Next sprint stories</span>
+                ${renderStoryChips(section.stories, "", { preview: true, previewLimit: 4 })}
+              </div>`
+            : ""
+        }
+      </div>
+    </article>
+  `;
+}
+
+function renderAdoReportSection(section, index, nextIteration) {
+  if (section.type === "screenshot") {
+    return renderAdoReportScreenshotSection(section);
+  }
+
+  if (section.type === "challenge") {
+    return renderAdoReportChallengeSection(section);
+  }
+
+  if (section.type === "risk") {
+    return renderAdoReportRiskSection(section);
+  }
+
+  if (section.type === "next_steps") {
+    return renderAdoReportNextStepsSection(section, nextIteration);
+  }
+
+  return renderAdoReportDeliverySection(section, index);
+}
+
+function renderAdoNarrativeSections(sections, nextIteration = null) {
+  if (!sections || sections.length === 0) {
+    return `<div class="empty-state">No review sections were added. Return to the builder to add stakeholder-facing context.</div>`;
   }
 
   return `
-    <div class="ado-report-update-grid">
-      ${updates
-        .map(
-          (update) => `
-            <article class="ado-report-update-card${update.priority ? " priority" : ""}">
-              <div class="update-card-heading">
-                <h3>${escapeHtml(update.title || "Update")}</h3>
-                ${update.priority ? `<span>#1 priority</span>` : ""}
-              </div>
-              ${renderBulletList(update.bullets, "No bullet points were added for this update.")}
-              ${
-                update.businessValue
-                  ? `<div class="business-value-box"><span>Business value</span><p>${escapeHtml(update.businessValue)}</p></div>`
-                  : ""
-              }
-              ${
-                update.stories && update.stories.length > 0
-                  ? `<div class="story-evidence">
-                      ${renderStoryChips(update.stories)}
-                    </div>`
-                  : ""
-              }
-            </article>
-          `
-        )
-        .join("")}
+    <div class="ado-report-section-stack">
+      ${sections.map((section, index) => renderAdoReportSection(section, index, nextIteration)).join("")}
     </div>
   `;
+}
+
+function renderAdoDeliveryUpdates(updates) {
+  const sections = (updates || []).map((update, index) => normalizeReviewSection({ ...update, type: "delivery" }, index));
+  return renderAdoNarrativeSections(sections);
 }
 
 function renderAdoNextSteps(nextSteps, nextIteration) {
@@ -1579,14 +2383,67 @@ function renderAdoDemoSection(demo) {
     return "";
   }
 
+  const presenters = Array.isArray(demo.presenters) ? demo.presenters : [];
+
   return `
     <section class="ado-report-section">
       <div>
         <span>Live demo</span>
-        <h2>Live Demo</h2>
+        <h2>${escapeHtml(demo.title || "Live Demo")}</h2>
       </div>
       <div class="demo-report-card">
+        ${
+          presenters.length > 0
+            ? `<div class="demo-presenter-list">
+                <span>Presenters</span>
+                ${presenters.map((presenter) => `<strong>${escapeHtml(presenter)}</strong>`).join("")}
+              </div>`
+            : ""
+        }
         <p>${escapeHtml(demo.note || "This sprint review includes a live demo.")}</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoReadinessAudience(title, audience) {
+  if (!audience || !audience.enabled) {
+    return "";
+  }
+
+  const stories = Array.isArray(audience.stories) ? audience.stories : [];
+
+  return `
+    <article class="readiness-report-card">
+      <div>
+        <span>${escapeHtml(title)}</span>
+        <h3>${escapeHtml(stories.length > 0 ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : "Ready for prep")}</h3>
+      </div>
+      ${
+        stories.length > 0
+          ? renderStoryChips(stories, "", { preview: true, previewLimit: 5 })
+          : `<p>${escapeHtml(audience.message || (title === "Training Environment" ? "We have items ready to go into the training environment." : "We have items ready to go into UAT."))}</p>`
+      }
+    </article>
+  `;
+}
+
+function renderAdoEnvironmentReadiness(readiness) {
+  const normalized = normalizeEnvironmentReadiness({ environmentReadiness: readiness });
+
+  if (!environmentReadinessHasContent(normalized)) {
+    return "";
+  }
+
+  return `
+    <section class="ado-report-section readiness-report-section">
+      <div>
+        <span>Stakeholder readiness</span>
+        <h2>What this means for you</h2>
+      </div>
+      <div class="readiness-report-grid">
+        ${renderAdoReadinessAudience("Training Environment", normalized.training)}
+        ${renderAdoReadinessAudience("UAT", normalized.uat)}
       </div>
     </section>
   `;
@@ -1659,7 +2516,8 @@ function renderAdoReportStyles() {
     .business-value-box span,
     .story-evidence > span,
     .ado-report-contributors > span,
-    .next-copy-panel > span {
+    .next-copy-panel > span,
+    .readiness-report-card > div:first-child span {
       display: block;
       font-size: .72rem;
       font-weight: 800;
@@ -1750,7 +2608,8 @@ function renderAdoReportStyles() {
     .velocity-panel,
     .ado-report-update-card,
     .next-copy-panel,
-    .story-evidence {
+    .story-evidence,
+    .readiness-report-card {
       background: #ffffff;
       border: 1px solid #dce7ec;
       border-radius: 10px;
@@ -1936,9 +2795,122 @@ function renderAdoReportStyles() {
       display: grid;
       gap: 16px;
     }
+    .ado-report-section-stack {
+      display: grid;
+      gap: 16px;
+    }
     .ado-report-update-card {
       border-left: 6px solid #0ebfca;
       padding: 22px;
+    }
+    .ado-report-special-card {
+      background: #ffffff;
+      border: 1px solid #dce7ec;
+      border-radius: 10px;
+      box-shadow: 0 16px 34px rgba(16, 33, 44, .08);
+      padding: 22px;
+    }
+    .section-special-heading {
+      align-items: center;
+      display: flex;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .section-special-heading > span {
+      align-items: center;
+      background: #edf8fd;
+      border: 1px solid #d7eefb;
+      border-radius: 12px;
+      color: #0076c0;
+      display: inline-flex;
+      font-size: 1.35rem;
+      height: 44px;
+      justify-content: center;
+      width: 44px;
+    }
+    .section-special-heading small {
+      color: #0076c0;
+      display: block;
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .section-special-heading h3 {
+      font-size: 1.45rem;
+      letter-spacing: -.025em;
+      line-height: 1.15;
+      margin: 0;
+    }
+    .screenshot-report-layout {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr);
+    }
+    .screenshot-report-media {
+      align-items: center;
+      background: #f3fbff;
+      border: 1px solid #d7eefb;
+      border-radius: 10px;
+      display: flex;
+      justify-content: center;
+      min-height: 240px;
+      overflow: hidden;
+    }
+    .screenshot-report-media img {
+      display: block;
+      max-height: 520px;
+      max-width: 100%;
+      object-fit: contain;
+      width: 100%;
+    }
+    .screenshot-report-copy {
+      display: grid;
+      gap: 12px;
+    }
+    .challenge-report-card {
+      border-left: 6px solid #0076c0;
+    }
+    .risk-report-card {
+      border-left: 6px solid #0ebfca;
+    }
+    .next-report-card {
+      border-left: 6px solid #0076c0;
+    }
+    .risk-report-card.severity-low { border-left-color: #6fcf97; }
+    .risk-report-card.severity-medium { border-left-color: #ffd166; }
+    .risk-report-card.severity-high { border-left-color: #f59e0b; }
+    .risk-report-card.severity-critical { border-left-color: #ef476f; }
+    .risk-report-card p {
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.6;
+      margin: 0 0 14px;
+    }
+    .risk-heatmap-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .risk-heatmap-row span,
+    .risk-owner-notes span,
+    .demo-presenter-list strong {
+      background: #f8fcff;
+      border: 1px solid #dce7ec;
+      border-radius: 999px;
+      color: #10212c;
+      display: inline-flex;
+      font-size: .78rem;
+      font-weight: 850;
+      padding: 8px 10px;
+    }
+    .risk-owner-notes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
     }
     .ado-report-update-card.priority {
       border-left-color: #ffd166;
@@ -2041,6 +3013,33 @@ function renderAdoReportStyles() {
     .next-copy-panel {
       padding: 22px;
     }
+    .readiness-report-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .readiness-report-card {
+      background:
+        radial-gradient(circle at 92% 8%, rgba(14, 191, 202, .14), transparent 32%),
+        #ffffff;
+      display: grid;
+      gap: 14px;
+      min-height: 180px;
+      padding: 22px;
+    }
+    .readiness-report-card h3 {
+      font-size: 1.45rem;
+      letter-spacing: -.025em;
+      line-height: 1.15;
+      margin: 0;
+    }
+    .readiness-report-card p {
+      color: #10212c;
+      font-size: 1rem;
+      font-weight: 750;
+      line-height: 1.55;
+      margin: 0;
+    }
     .demo-report-card {
       background:
         radial-gradient(circle, rgba(0, 118, 192, .18) 0 2px, transparent 3px) 0 0 / 18px 18px,
@@ -2054,6 +3053,20 @@ function renderAdoReportStyles() {
       font-weight: 700;
       line-height: 1.6;
       margin: 0;
+    }
+    .demo-presenter-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .demo-presenter-list > span {
+      color: #0076c0;
+      font-size: .72rem;
+      font-weight: 850;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      width: 100%;
     }
     .linked-story-more {
       background: #edf8fd;
@@ -2122,7 +3135,9 @@ function renderAdoReportStyles() {
       .metric-card-grid,
       .velocity-panel,
       .velocity-row,
-      .ado-report-next-grid {
+      .ado-report-next-grid,
+      .readiness-report-grid,
+      .screenshot-report-layout {
         grid-template-columns: 1fr;
       }
       .velocity-points { text-align: center; }
@@ -2241,6 +3256,7 @@ function renderAdoReportHtml(report) {
   const summary = narrative.summary || defaultSummaryText(result);
   const generatedAt = report.generatedAt || new Date().toISOString().slice(0, 10);
   const nextIteration = report.nextIteration || null;
+  const narrativeSections = normalizeNarrativeSections(narrative);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -2289,21 +3305,15 @@ function renderAdoReportHtml(report) {
 
     <section class="ado-report-section">
       <div>
-        <span>Sprint highlights</span>
-        <h2>What was delivered</h2>
+        <span>Sprint story</span>
+        <h2>Highlights, screenshots, challenges, risks, and next steps</h2>
       </div>
-      ${renderAdoDeliveryUpdates(narrative.updates || [])}
+      ${renderAdoNarrativeSections(narrativeSections, nextIteration)}
     </section>
 
     ${renderAdoDemoSection(narrative.demo)}
 
-    <section class="ado-report-section">
-      <div>
-        <span>Looking ahead</span>
-        <h2>What is lining up next</h2>
-      </div>
-      ${renderAdoNextSteps(narrative.nextSteps || { title: "", bullets: [], stories: [] }, nextIteration)}
-    </section>
+    ${renderAdoEnvironmentReadiness(narrative.environmentReadiness)}
 
     <footer class="ado-report-footer">
       Generated by SprintGen on ${escapeHtml(generatedAt)}. ADO supplied facts and story wording. Scrum master narrative was reviewed on screen before generation.
@@ -3143,7 +4153,11 @@ function renderAdoAdminPage({
               }
 
               builderMount.innerHTML = html;
-              initStoryPickers(builderMount);
+              if (window.ScrumStudioReviewBuilder) {
+                window.ScrumStudioReviewBuilder.init(builderMount);
+              } else {
+                initStoryPickers(builderMount);
+              }
 
               if (!response.ok) {
                 lastBuilderKey = "";
@@ -3284,37 +4298,163 @@ function renderCompletedPresentationItems(items) {
   `;
 }
 
-function renderAdoPresentationUpdateSlides(updates) {
-  if (!updates || updates.length === 0) {
+function renderAdoPresentationDeliverySlide(section, index) {
+  return `
+    <section class="ado-present-slide">
+      <div class="present-card wide narrative-card">
+        <span class="present-kicker">${section.priority ? "#1 priority" : `Delivery Update ${index + 1}`}</span>
+        <h2>${escapeHtml(section.title || `Delivery update ${index + 1}`)}</h2>
+        <div class="present-narrative-grid single delivery-update-layout">
+          <div class="present-copy-block">
+            ${renderBulletList(section.bullets, "No bullet points were added for this update.")}
+            ${
+              section.stories && section.stories.length > 0
+                ? `<div class="delivery-story-pill">${renderStoryChips(section.stories)}</div>`
+                : ""
+            }
+            ${
+              section.businessValue
+                ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                : ""
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationScreenshotSlide(section) {
+  return `
+    <section class="ado-present-slide">
+      <div class="present-card wide narrative-card screenshot-present-card">
+        <span class="present-kicker">Screenshot</span>
+        <h2>${escapeHtml(section.title || "Screenshot")}</h2>
+        <div class="present-screenshot-layout">
+          <div class="present-screenshot-media">
+            ${section.imageData ? `<img src="${escapeHtml(section.imageData)}" alt="${escapeHtml(section.title || "Review screenshot")}">` : `<p class="present-empty">No screenshot was added.</p>`}
+          </div>
+          <div class="present-copy-block">
+            ${renderBulletList(section.bullets, "No screenshot notes were added.")}
+            ${
+              section.businessValue
+                ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                : ""
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationChallengeSlide(section) {
+  return `
+    <section class="ado-present-slide">
+      <div class="present-card wide narrative-card special-present-card challenge-present-card">
+        <span class="present-kicker">Challenge</span>
+        <div class="present-special-heading">
+          <span aria-hidden="true">${sectionIcon("challenge")}</span>
+          <h2>${escapeHtml(section.title || "Challenge")}</h2>
+        </div>
+        <div class="present-copy-block">
+          ${renderBulletList(section.bullets, "No challenge notes were added.")}
+          ${
+            section.businessValue
+              ? `<div class="present-business-value"><span>Response</span><p>${escapeHtml(section.businessValue)}</p></div>`
+              : ""
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationRiskSlide(section) {
+  const severity = riskSeverity(section);
+
+  return `
+    <section class="ado-present-slide">
+      <div class="present-card wide narrative-card special-present-card risk-present-card severity-${escapeHtml(severity)}">
+        <span class="present-kicker">Risk</span>
+        <div class="present-special-heading">
+          <span aria-hidden="true">${sectionIcon("risk")}</span>
+          <h2>${escapeHtml(section.title || "Risk")}</h2>
+        </div>
+        <div class="present-risk-grid">
+          <div class="present-copy-block">
+            <p>${escapeHtml(section.description || "No risk description was added.")}</p>
+            ${
+              section.owner || section.notes
+                ? `<p class="present-risk-notes">${escapeHtml([section.owner ? `Owner: ${section.owner}` : "", section.notes || ""].filter(Boolean).join(" - "))}</p>`
+                : ""
+            }
+          </div>
+          <div class="present-risk-heat">
+            <span>Impact</span><strong>${escapeHtml(riskScaleLabel(section.impact))}</strong>
+            <span>Likelihood</span><strong>${escapeHtml(riskScaleLabel(section.likelihood))}</strong>
+            <span>ROAM</span><strong>${escapeHtml(roamStatusLabel(section.roam))}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationNextStepsSlide(section, nextIteration) {
+  return `
+    <section class="ado-present-slide">
+      <div class="present-card wide narrative-card next-present-card">
+        <span class="present-kicker">Looking Ahead</span>
+        <h2>${escapeHtml(section.title || (nextIteration && nextIteration.name) || "What is next")}</h2>
+        <div class="present-narrative-grid${section.stories && section.stories.length > 0 ? "" : " single"}">
+          <div class="present-copy-block">
+            ${renderBulletList(section.bullets, "No next-step bullets were added.")}
+            ${
+              section.businessValue
+                ? `<div class="present-business-value"><span>Context</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                : ""
+            }
+          </div>
+          ${
+            section.stories && section.stories.length > 0
+              ? `<div class="present-story-block">
+                  <span>${escapeHtml(nextIteration ? nextIteration.name : "Next sprint")} stories</span>
+                  ${renderStoryChips(section.stories, "", { preview: true, previewLimit: 4 })}
+                </div>`
+              : ""
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationSectionSlides(sections, nextIteration = null) {
+  if (!sections || sections.length === 0) {
     return "";
   }
 
-  return updates
-    .map(
-      (update, index) => `
-        <section class="ado-present-slide">
-          <div class="present-card wide narrative-card">
-            <span class="present-kicker">${update.priority ? "#1 priority" : `Delivery Update ${index + 1}`}</span>
-            <h2>${escapeHtml(update.title || `Delivery update ${index + 1}`)}</h2>
-            <div class="present-narrative-grid single delivery-update-layout">
-              <div class="present-copy-block">
-                ${renderBulletList(update.bullets, "No bullet points were added for this update.")}
-                ${
-                  update.stories && update.stories.length > 0
-                    ? `<div class="delivery-story-pill">${renderStoryChips(update.stories)}</div>`
-                    : ""
-                }
-                ${
-                  update.businessValue
-                    ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(update.businessValue)}</p></div>`
-                    : ""
-                }
-              </div>
-            </div>
-          </div>
-        </section>
-      `
-    )
+  return sections
+    .map((section, index) => {
+      if (section.type === "screenshot") {
+        return renderAdoPresentationScreenshotSlide(section);
+      }
+
+      if (section.type === "challenge") {
+        return renderAdoPresentationChallengeSlide(section);
+      }
+
+      if (section.type === "risk") {
+        return renderAdoPresentationRiskSlide(section);
+      }
+
+      if (section.type === "next_steps") {
+        return renderAdoPresentationNextStepsSlide(section, nextIteration);
+      }
+
+      return renderAdoPresentationDeliverySlide(section, index);
+    })
     .join("");
 }
 
@@ -3323,10 +4463,62 @@ function renderAdoPresentationDemoSlide(demo) {
     return "";
   }
 
+  const presenters = Array.isArray(demo.presenters) ? demo.presenters : [];
+
   return `
     <section class="ado-present-slide demo-handoff-slide">
       <div class="present-card demo-handoff-card">
-        <h2>Live Demo</h2>
+        <span class="present-kicker">Live Demo</span>
+        <h2>${escapeHtml(demo.title || "Live Demo")}</h2>
+        ${
+          presenters.length > 0
+            ? `<div class="demo-presenter-chips">
+                ${presenters.map((presenter) => `<span>${escapeHtml(presenter)}</span>`).join("")}
+              </div>`
+            : ""
+        }
+        ${demo.note ? `<p>${escapeHtml(demo.note)}</p>` : `<p>Pause here for the live walkthrough.</p>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderAdoPresentationReadinessAudience(title, audience) {
+  if (!audience || !audience.enabled) {
+    return "";
+  }
+
+  const stories = Array.isArray(audience.stories) ? audience.stories : [];
+
+  return `
+    <article class="present-readiness-card">
+      <span>${escapeHtml(title)}</span>
+      <h3>${escapeHtml(stories.length > 0 ? `${stories.length} item${stories.length === 1 ? "" : "s"} expected` : "Ready for prep")}</h3>
+      ${
+        stories.length > 0
+          ? renderStoryChips(stories, "", { preview: true, previewLimit: 4 })
+          : `<p>${escapeHtml(audience.message || (title === "Training Environment" ? "We have items ready to go into the training environment." : "We have items ready to go into UAT."))}</p>`
+      }
+    </article>
+  `;
+}
+
+function renderAdoPresentationReadinessSlide(readiness) {
+  const normalized = normalizeEnvironmentReadiness({ environmentReadiness: readiness });
+
+  if (!environmentReadinessHasContent(normalized)) {
+    return "";
+  }
+
+  return `
+    <section class="ado-present-slide readiness-present-slide">
+      <div class="present-card wide narrative-card readiness-present-card">
+        <span class="present-kicker">Stakeholder Readiness</span>
+        <h2>What this means for you</h2>
+        <div class="present-readiness-grid">
+          ${renderAdoPresentationReadinessAudience("Training Environment", normalized.training)}
+          ${renderAdoPresentationReadinessAudience("UAT", normalized.uat)}
+        </div>
       </div>
     </section>
   `;
@@ -3355,6 +4547,7 @@ function renderAdoPresentationPage(report, vibeInput) {
   const vibe = normalizePresentationVibe(vibeInput);
   const completedItems = metrics.items ? metrics.items.completed : [];
   const summary = narrative && narrative.summary ? narrative.summary : defaultSummaryText(result);
+  const narrativeSections = narrative ? normalizeNarrativeSections(narrative) : [];
   const presentationBrandRailTop = renderBrandRail({
     mono: true,
     className: "presentation-brand-rail is-top"
@@ -3377,27 +4570,9 @@ function renderAdoPresentationPage(report, vibeInput) {
     : "";
   const narrativeSlides = narrative
     ? `
-      ${renderAdoPresentationUpdateSlides(narrative.updates || [])}
+      ${renderAdoPresentationSectionSlides(narrativeSections, nextIteration)}
       ${renderAdoPresentationDemoSlide(narrative.demo)}
-      <section class="ado-present-slide">
-        <div class="present-card wide narrative-card">
-          <span class="present-kicker">Looking Ahead</span>
-          <h2>${escapeHtml((narrative.nextSteps && narrative.nextSteps.title) || (nextIteration && nextIteration.name) || "What is next")}</h2>
-          <div class="present-narrative-grid${narrative.nextSteps && narrative.nextSteps.stories && narrative.nextSteps.stories.length > 0 ? "" : " single"}">
-            <div class="present-copy-block">
-              ${renderBulletList(narrative.nextSteps && narrative.nextSteps.bullets ? narrative.nextSteps.bullets : [], "No next-step bullets were added.")}
-            </div>
-            ${
-              narrative.nextSteps && narrative.nextSteps.stories && narrative.nextSteps.stories.length > 0
-                ? `<div class="present-story-block">
-                    <span>${escapeHtml(nextIteration ? nextIteration.name : "Next sprint")} stories</span>
-                    ${renderStoryChips(narrative.nextSteps.stories, "", { preview: true, previewLimit: 4 })}
-                  </div>`
-                : ""
-            }
-          </div>
-        </div>
-      </section>
+      ${renderAdoPresentationReadinessSlide(narrative.environmentReadiness)}
     `
     : `
       <section class="ado-present-slide">
@@ -3439,7 +4614,7 @@ function renderAdoPresentationPage(report, vibeInput) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/ado-present.css?v=10">
+  <link rel="stylesheet" href="/assets/ado-present.css?v=13">
 </head>
 <body class="vibe-${escapeHtml(vibe)}">
   <div class="present-progress" aria-hidden="true"><span></span></div>
@@ -3506,7 +4681,6 @@ function renderErrorPage(error) {
         <p class="lede">${escapeHtml(error.message || error)}</p>
         <div class="result-actions">
           <a class="primary-button" href="/">Back Home</a>
-          <a class="ghost-button" href="/template">Sample workbook</a>
         </div>
       </section>
     `
@@ -3541,6 +4715,29 @@ const upload = multer({
 
     if (extension !== ".xlsx") {
       callback(new Error("Please upload an Excel workbook with the .xlsx extension."));
+      return;
+    }
+
+    callback(null, true);
+  }
+});
+
+const reviewBuilderUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: maxScreenshotBytes,
+    files: 20,
+    fields: 1200,
+    fieldSize: 2 * 1024 * 1024
+  },
+  fileFilter(req, file, callback) {
+    if (!String(file.fieldname || "").startsWith("section_image_")) {
+      callback(new Error("Only review section screenshots can be uploaded from the builder."));
+      return;
+    }
+
+    if (!allowedImageMime(file.mimetype)) {
+      callback(new Error("Please upload screenshots as PNG, JPG, GIF, or WebP images."));
       return;
     }
 
@@ -3913,11 +5110,11 @@ app.get("/reviews/:id/edit", (req, res) => {
   }
 });
 
-app.post("/reviews/:id/update", async (req, res) => {
+app.post("/reviews/:id/update", reviewBuilderUpload.any(), async (req, res) => {
   try {
     const review = readSavedReview(req.params.id);
     const draft = buildDraftFromSavedReview(review);
-    const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items);
+    const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items, req.files, review.narrative || {});
 
     if (!narrative.summary) {
       narrative.summary = defaultSummaryText(draft.result);
@@ -4257,7 +5454,7 @@ app.post("/ado-admin/preview", handleAdoReviewBuilder);
 app.post("/ado-admin/review", handleAdoReviewBuilder);
 app.post("/ado-admin/story", handleAdoReviewBuilder);
 
-app.post("/ado-admin/generate-report", createJobId, async (req, res) => {
+app.post("/ado-admin/generate-report", createJobId, reviewBuilderUpload.any(), async (req, res) => {
   const session = getAdoSession(req);
 
   if (!session) {
@@ -4283,7 +5480,7 @@ app.post("/ado-admin/generate-report", createJobId, async (req, res) => {
       sprint: selectedSprint,
       areaPath: selectedAreaPath
     });
-    const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items);
+    const narrative = parseAdoNarrative(req.body, draft.currentItems, draft.nextWorkItems.items, req.files);
 
     if (!narrative.summary) {
       narrative.summary = defaultSummaryText(draft.result);
@@ -4575,7 +5772,7 @@ app.use((error, req, res, next) => {
   removeJob(req.jobId);
 
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-    res.status(400).send(renderErrorPage("That workbook is larger than 8 MB. Please upload a smaller .xlsx file."));
+    res.status(400).send(renderErrorPage("That upload is too large. Workbooks are limited to 8 MB and review screenshots are limited to 5 MB."));
     return;
   }
 

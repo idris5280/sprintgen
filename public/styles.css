@@ -1325,6 +1325,7 @@ h2 {
 .builder-fact-card span,
 .section-heading-row span,
 .delivery-card-topline > span,
+.section-kicker,
 .story-picker-heading span,
 .story-picker summary small,
 .story-picker summary em,
@@ -1456,6 +1457,204 @@ h2 {
     radial-gradient(circle at 100% 0%, rgba(14, 191, 202, .12), transparent 30%),
     #ffffff;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.review-sections-builder {
+  display: grid;
+  gap: 18px;
+}
+
+.section-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section-add-row .secondary-button {
+  border-radius: 8px;
+  min-height: 42px;
+}
+
+.review-section-card {
+  border-left: 5px solid rgba(14, 191, 202, .75);
+  position: relative;
+}
+
+.section-type-screenshot {
+  border-left-color: rgba(0, 118, 192, .78);
+}
+
+.section-type-challenge {
+  border-left-color: rgba(255, 209, 102, .92);
+}
+
+.section-type-risk {
+  border-left-color: rgba(239, 71, 111, .78);
+}
+
+.section-type-next_steps {
+  border-left-color: rgba(0, 118, 192, .78);
+}
+
+.section-editor-topline,
+.section-editor-title-row,
+.section-editor-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.section-editor-topline {
+  justify-content: space-between;
+}
+
+.section-editor-title-row {
+  min-width: 0;
+}
+
+.section-icon {
+  align-items: center;
+  background: rgba(237, 248, 253, .92);
+  border: 1px solid rgba(159, 214, 239, .7);
+  border-radius: 12px;
+  color: var(--blue);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 1.25rem;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.section-kicker {
+  color: var(--blue);
+  display: block;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.section-kicker em {
+  font-style: normal;
+}
+
+.section-editor-title-row strong {
+  color: var(--ink);
+  display: block;
+  font-size: .96rem;
+  line-height: 1.3;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.section-editor-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ghost-button.compact {
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 8px 10px;
+}
+
+.ghost-button.danger {
+  color: #ef476f;
+}
+
+.section-subline {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.screenshot-editor-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr);
+}
+
+.screenshot-drop-zone {
+  background: rgba(237, 248, 253, .75);
+  border: 1px dashed rgba(0, 118, 192, .42);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.screenshot-drop-zone:focus-within,
+.screenshot-drop-zone:focus,
+.screenshot-drop-zone.is-dragging {
+  border-color: var(--aqua);
+  box-shadow: 0 0 0 3px rgba(14, 191, 202, .16);
+  outline: none;
+}
+
+.screenshot-preview {
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  font-size: .88rem;
+  font-weight: 800;
+  justify-content: center;
+  overflow: hidden;
+  padding: 14px;
+  text-align: center;
+}
+
+.screenshot-preview.has-image {
+  padding: 0;
+}
+
+.screenshot-preview img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.screenshot-copy-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.risk-editor-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.risk-editor-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.readiness-builder-section {
+  display: grid;
+  gap: 18px;
+}
+
+.readiness-editor-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.readiness-audience-card {
+  background:
+    radial-gradient(circle at 94% 8%, rgba(14, 191, 202, .14), transparent 30%),
+    #ffffff;
+  border: 1px solid var(--line);
+  border-left: 5px solid rgba(0, 118, 192, .78);
   border-radius: 8px;
   display: grid;
   gap: 16px;
@@ -2599,10 +2798,14 @@ body:not(.studio-page) .app-shell {
 .builder-fact-card,
 .narrative-section,
 .delivery-editor-card,
+.readiness-audience-card,
+.screenshot-drop-zone,
+.screenshot-preview,
 .next-editor-copy,
 .demo-toggle-panel,
 .story-picker,
 .story-checkbox,
+.risk-editor-grid .text-input,
 .story-row,
 .chart-card,
 .velocity-panel,
@@ -2926,6 +3129,22 @@ select.text-input option {
   stroke: #65d6ff;
 }
 
+.ado-page .section-icon,
+.result-page .section-icon {
+  background: rgba(61, 156, 255, .12);
+  border-color: rgba(145, 190, 224, .2);
+  color: #65d6ff;
+}
+
+.ado-page .screenshot-drop-zone,
+.ado-page .screenshot-preview {
+  background: rgba(7, 16, 28, .42);
+}
+
+.ado-page .screenshot-preview {
+  color: #9fb5c8;
+}
+
 .studio-brand-mark,
 .studio-tool-card::before,
 .studio-hero::before,
@@ -2969,7 +3188,10 @@ select.text-input option {
   .saved-review-stats,
   .next-editor-grid,
   .demo-copy-grid,
-  .opening-copy-grid {
+  .opening-copy-grid,
+  .screenshot-editor-grid,
+  .risk-editor-grid,
+  .risk-editor-grid.two {
     grid-template-columns: 1fr;
   }
 
@@ -3062,6 +3284,10 @@ select.text-input option {
   .builder-submit-panel {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .readiness-editor-grid {
+    grid-template-columns: 1fr;
   }
 
   .narrative-section {

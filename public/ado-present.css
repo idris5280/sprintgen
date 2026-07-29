@@ -937,6 +937,182 @@ body.vibe-prismatic .present-business-value::after {
     42px -14px 0 0 rgba(255, 230, 109, .82);
 }
 
+.present-screenshot-layout {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr);
+  margin-top: 18px;
+}
+
+.present-screenshot-media {
+  align-items: center;
+  background: rgba(255, 255, 255, .74);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  min-height: min(54vh, 520px);
+  overflow: hidden;
+  padding: 10px;
+}
+
+.present-screenshot-media img {
+  display: block;
+  max-height: 58vh;
+  max-width: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.present-special-heading {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.present-special-heading > span {
+  align-items: center;
+  background: rgba(0, 118, 192, .12);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--blue);
+  display: inline-flex;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  height: clamp(64px, 9vw, 88px);
+  justify-content: center;
+  width: clamp(64px, 9vw, 88px);
+}
+
+.present-special-heading h2 {
+  margin: 0;
+}
+
+.present-risk-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, .5fr);
+}
+
+.present-risk-heat {
+  background: rgba(255, 255, 255, .78);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: clamp(18px, 2.4vw, 28px);
+}
+
+.present-risk-heat span {
+  color: var(--blue);
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.present-risk-heat strong {
+  color: var(--ink);
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+
+.risk-present-card.severity-low .present-risk-heat {
+  border-color: rgba(39, 174, 96, .38);
+}
+
+.risk-present-card.severity-medium .present-risk-heat {
+  border-color: rgba(255, 209, 102, .62);
+}
+
+.risk-present-card.severity-high .present-risk-heat {
+  border-color: rgba(245, 158, 11, .58);
+}
+
+.risk-present-card.severity-critical .present-risk-heat {
+  border-color: rgba(239, 71, 111, .58);
+}
+
+.present-risk-notes {
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+body.vibe-dark .present-screenshot-media,
+body.vibe-dark .present-risk-heat {
+  background: rgba(12, 20, 31, .72);
+}
+
+body.vibe-dark .present-risk-heat strong,
+body.vibe-prismatic .present-risk-heat strong {
+  color: #ffffff;
+}
+
+body.vibe-prismatic .present-screenshot-media,
+body.vibe-prismatic .present-risk-heat {
+  background: rgba(16, 17, 43, .62);
+}
+
+.present-readiness-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 22px;
+}
+
+.present-readiness-card {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(14, 191, 202, .14), transparent 32%),
+    rgba(255, 255, 255, .78);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 16px;
+  min-height: min(34vh, 320px);
+  padding: clamp(18px, 2.4vw, 28px);
+}
+
+.present-readiness-card > span {
+  color: var(--blue);
+  display: block;
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.present-readiness-card h3 {
+  color: var(--ink);
+  font-size: clamp(1.55rem, 3vw, 2.35rem);
+  letter-spacing: -.035em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.present-readiness-card p {
+  color: var(--ink);
+  font-size: clamp(1rem, 1.7vw, 1.25rem);
+  font-weight: 750;
+  line-height: 1.55;
+  margin: 0;
+}
+
+body.vibe-dark .present-readiness-card {
+  background: rgba(12, 20, 31, .72);
+}
+
+body.vibe-dark .present-readiness-card h3,
+body.vibe-dark .present-readiness-card p,
+body.vibe-prismatic .present-readiness-card h3,
+body.vibe-prismatic .present-readiness-card p {
+  color: #ffffff;
+}
+
+body.vibe-prismatic .present-readiness-card {
+  background: rgba(16, 17, 43, .62);
+}
+
 .linked-story-list {
   display: grid;
   gap: 10px;
@@ -1070,6 +1246,24 @@ body.vibe-prismatic .story-summary-pill strong {
 
 .demo-handoff-card h2 {
   margin-bottom: 0;
+}
+
+.demo-presenter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin: 24px auto 0;
+}
+
+.demo-presenter-chips span {
+  background: rgba(255, 255, 255, .72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: .9rem;
+  font-weight: 850;
+  padding: 10px 14px;
 }
 
 .demo-handoff-card p,
@@ -1324,7 +1518,10 @@ body.vibe-prismatic .present-controls button {
   .velocity-panel,
   .present-work-list,
   .present-narrative-grid,
-  .demo-handoff-steps {
+  .demo-handoff-steps,
+  .present-screenshot-layout,
+  .present-risk-grid,
+  .present-readiness-grid {
     grid-template-columns: 1fr;
   }
 
