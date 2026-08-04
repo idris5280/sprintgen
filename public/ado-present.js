@@ -251,12 +251,12 @@
   }
 
   function nearestSlideIndex() {
-    const viewportTop = window.scrollY;
+    const viewportTop = Math.round(window.scrollY);
     let nearest = 0;
     let distance = Infinity;
 
     slides.forEach((slide, index) => {
-      const nextDistance = Math.abs(slide.offsetTop - viewportTop);
+      const nextDistance = Math.abs(Math.round(slide.offsetTop) - viewportTop);
 
       if (nextDistance < distance) {
         nearest = index;
@@ -265,6 +265,20 @@
     });
 
     return nearest;
+  }
+
+  function indexFromHash(hashValue) {
+    const id = String(hashValue || "").replace(/^#/, "");
+    if (!id) return 0;
+
+    const exactIndex = slides.findIndex((slide) => slide.id === id);
+    if (exactIndex >= 0) return exactIndex;
+
+    const numericMatch = id.match(/^slide-(\d+)$/i);
+    if (!numericMatch) return 0;
+
+    const slideNumber = Number(numericMatch[1]);
+    return Number.isFinite(slideNumber) ? slideNumber - 1 : 0;
   }
 
   function updateProgress() {
@@ -294,6 +308,12 @@
   function goTo(index) {
     const safeIndex = Math.max(0, Math.min(slides.length - 1, index));
     slides[safeIndex].scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function jumpTo(index) {
+    const safeIndex = Math.max(0, Math.min(slides.length - 1, index));
+    window.scrollTo({ top: slides[safeIndex].offsetTop, behavior: "auto" });
+    updateProgress();
   }
 
   function goNext() {
@@ -329,5 +349,12 @@
   setupMetricCountAnimations();
   window.addEventListener("scroll", updateProgress, { passive: true });
   window.addEventListener("resize", updateProgress);
-  updateProgress();
+
+  window.addEventListener("hashchange", () => {
+    jumpTo(indexFromHash(window.location.hash));
+  });
+
+  window.requestAnimationFrame(() => {
+    jumpTo(indexFromHash(window.location.hash));
+  });
 })();

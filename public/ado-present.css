@@ -739,11 +739,25 @@ body.vibe-prismatic .velocity-points {
 
 .present-summary {
   color: var(--muted);
+  margin: 20px 0 0;
+  max-width: 900px;
+}
+
+.present-summary p,
+.present-summary li {
   font-size: clamp(1.2rem, 2.6vw, 1.8rem);
   font-weight: 700;
   line-height: 1.55;
-  margin: 20px 0 0;
-  max-width: 900px;
+}
+
+.present-summary p {
+  margin: 0;
+}
+
+.present-summary p + p,
+.present-summary ul + p,
+.present-summary p + ul {
+  margin-top: 12px;
 }
 
 .present-subtitle {
@@ -913,7 +927,11 @@ body.vibe-prismatic .present-contributor-list span {
 }
 
 .present-business-value p,
-.present-copy-block p {
+.present-business-value li,
+.present-copy-block p,
+.present-copy-block li,
+.present-risk-notes p,
+.present-risk-notes li {
   color: var(--ink);
   font-size: 1rem;
   font-weight: 700;
@@ -922,13 +940,26 @@ body.vibe-prismatic .present-contributor-list span {
 }
 
 .present-business-value span,
-.present-business-value p {
+.present-business-value p,
+.present-business-value ul {
   position: relative;
   z-index: 1;
 }
 
 .present-business-value span {
   color: #1b8a45;
+}
+
+.present-copy-block p + p,
+.present-copy-block ul + p,
+.present-copy-block p + ul,
+.present-business-value p + p,
+.present-business-value ul + p,
+.present-business-value p + ul,
+.present-risk-notes p + p,
+.present-risk-notes ul + p,
+.present-risk-notes p + ul {
+  margin-top: 10px;
 }
 
 body.vibe-dark .present-business-value {
@@ -944,7 +975,8 @@ body.vibe-dark .present-business-value span {
   color: #ccecff;
 }
 
-body.vibe-dark .present-business-value p {
+body.vibe-dark .present-business-value p,
+body.vibe-dark .present-business-value li {
   color: #f7fbff;
 }
 
@@ -989,7 +1021,8 @@ body.vibe-prismatic .present-business-value span {
   color: #ffe66d;
 }
 
-body.vibe-prismatic .present-business-value p {
+body.vibe-prismatic .present-business-value p,
+body.vibe-prismatic .present-business-value li {
   color: #ffffff;
 }
 
@@ -1073,9 +1106,12 @@ body.vibe-prismatic .present-business-value::after {
 }
 
 .present-risk-heat {
-  background: rgba(255, 255, 255, .78);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .76)),
+    var(--risk-heat-bg, rgba(255, 255, 255, .78));
   border: 1px solid var(--line);
   border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .42), 0 18px 38px var(--risk-shadow, rgba(15, 23, 42, .08));
   display: grid;
   gap: 8px;
   padding: clamp(18px, 2.4vw, 28px);
@@ -1103,7 +1139,7 @@ body.vibe-prismatic .present-business-value::after {
 }
 
 .present-risk-heat strong {
-  color: var(--ink);
+  color: var(--risk-text, var(--ink));
   font-size: clamp(1.35rem, 2.4vw, 2rem);
   line-height: 1.1;
   margin-bottom: 10px;
@@ -1111,32 +1147,52 @@ body.vibe-prismatic .present-business-value::after {
 
 .risk-present-card.severity-low .present-risk-heat {
   --risk-accent: #2fbf71;
+  --risk-heat-bg: linear-gradient(135deg, rgba(47, 191, 113, .18), rgba(47, 191, 113, .07));
+  --risk-shadow: rgba(47, 191, 113, .16);
   border-color: rgba(47, 191, 113, .48);
 }
 
 .risk-present-card.severity-medium .present-risk-heat {
   --risk-accent: #f59e0b;
+  --risk-heat-bg: linear-gradient(135deg, rgba(245, 158, 11, .24), rgba(245, 158, 11, .08));
+  --risk-shadow: rgba(245, 158, 11, .18);
   border-color: rgba(245, 158, 11, .62);
 }
 
 .risk-present-card.severity-high .present-risk-heat {
   --risk-accent: #f97316;
+  --risk-heat-bg: linear-gradient(135deg, rgba(249, 115, 22, .3), rgba(249, 115, 22, .1));
+  --risk-shadow: rgba(249, 115, 22, .2);
   border-color: rgba(249, 115, 22, .64);
 }
 
 .risk-present-card.severity-critical .present-risk-heat {
   --risk-accent: #ef4444;
+  --risk-heat-bg: linear-gradient(135deg, rgba(239, 68, 68, .34), rgba(239, 68, 68, .12));
+  --risk-shadow: rgba(239, 68, 68, .24);
   border-color: rgba(239, 71, 111, .58);
 }
 
 .present-risk-notes {
   color: var(--muted);
+  display: grid;
+  gap: 8px;
   margin-top: 16px;
+}
+
+.present-risk-notes span {
+  color: var(--blue);
+  font-size: .72rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 
 body.vibe-dark .present-screenshot-media,
 body.vibe-dark .present-risk-heat {
-  background: rgba(7, 48, 112, .7);
+  background:
+    linear-gradient(135deg, rgba(4, 31, 75, .74), rgba(5, 58, 125, .62)),
+    var(--risk-heat-bg, rgba(7, 48, 112, .7));
   border-color: rgba(154, 205, 255, .28);
 }
 
@@ -1144,20 +1200,34 @@ body.vibe-dark .present-risk-heat strong {
   color: #ffffff;
 }
 
-body.vibe-dark .risk-present-card.severity-low .present-risk-heat,
-body.vibe-dark .risk-present-card.severity-medium .present-risk-heat,
-body.vibe-dark .risk-present-card.severity-high .present-risk-heat,
+body.vibe-dark .risk-present-card.severity-low .present-risk-heat {
+  --risk-heat-bg: linear-gradient(135deg, rgba(46, 204, 113, .24), rgba(11, 78, 121, .58));
+  border-color: rgba(71, 210, 137, .74);
+}
+
+body.vibe-dark .risk-present-card.severity-medium .present-risk-heat {
+  --risk-heat-bg: linear-gradient(135deg, rgba(245, 158, 11, .34), rgba(11, 78, 121, .58));
+  border-color: rgba(251, 191, 36, .8);
+}
+
+body.vibe-dark .risk-present-card.severity-high .present-risk-heat {
+  --risk-heat-bg: linear-gradient(135deg, rgba(249, 115, 22, .42), rgba(12, 68, 116, .58));
+  border-color: rgba(251, 146, 60, .86);
+}
+
 body.vibe-dark .risk-present-card.severity-critical .present-risk-heat {
-  border-color: rgba(155, 211, 255, .58);
+  --risk-heat-bg: linear-gradient(135deg, rgba(239, 68, 68, .48), rgba(12, 68, 116, .58));
+  border-color: rgba(248, 113, 113, .9);
 }
 
 body.vibe-prismatic .present-screenshot-media,
 body.vibe-prismatic .present-risk-heat {
   background:
     radial-gradient(circle at 92% 10%, rgba(0, 240, 255, .14), transparent 28%),
-    rgba(255, 255, 255, .82);
+    linear-gradient(135deg, rgba(255, 255, 255, .82), rgba(255, 255, 255, .66)),
+    var(--risk-heat-bg, rgba(255, 255, 255, .82));
   border-color: var(--risk-accent, rgba(0, 174, 239, .42));
-  box-shadow: 0 18px 42px rgba(0, 118, 192, .08);
+  box-shadow: 0 18px 42px var(--risk-shadow, rgba(0, 118, 192, .08));
 }
 
 body.vibe-prismatic .present-risk-heat strong {
@@ -1165,27 +1235,19 @@ body.vibe-prismatic .present-risk-heat strong {
 }
 
 body.vibe-prismatic .risk-present-card.severity-low .present-risk-heat {
-  background:
-    radial-gradient(circle at 92% 10%, rgba(47, 191, 113, .16), transparent 28%),
-    rgba(255, 255, 255, .84);
+  --risk-heat-bg: linear-gradient(135deg, rgba(47, 191, 113, .26), rgba(47, 191, 113, .08));
 }
 
 body.vibe-prismatic .risk-present-card.severity-medium .present-risk-heat {
-  background:
-    radial-gradient(circle at 92% 10%, rgba(245, 158, 11, .2), transparent 28%),
-    rgba(255, 255, 255, .84);
+  --risk-heat-bg: linear-gradient(135deg, rgba(245, 158, 11, .32), rgba(245, 158, 11, .1));
 }
 
 body.vibe-prismatic .risk-present-card.severity-high .present-risk-heat {
-  background:
-    radial-gradient(circle at 92% 10%, rgba(249, 115, 22, .2), transparent 28%),
-    rgba(255, 255, 255, .84);
+  --risk-heat-bg: linear-gradient(135deg, rgba(249, 115, 22, .38), rgba(249, 115, 22, .12));
 }
 
 body.vibe-prismatic .risk-present-card.severity-critical .present-risk-heat {
-  background:
-    radial-gradient(circle at 92% 10%, rgba(239, 68, 68, .2), transparent 28%),
-    rgba(255, 255, 255, .84);
+  --risk-heat-bg: linear-gradient(135deg, rgba(239, 68, 68, .44), rgba(239, 68, 68, .14));
 }
 
 .present-readiness-grid {
@@ -1469,6 +1531,7 @@ body.vibe-prismatic .demo-presenter-chips span {
 }
 
 .demo-handoff-card p,
+.demo-handoff-card li,
 .questions-card p {
   color: var(--muted);
   font-size: clamp(1rem, 2vw, 1.32rem);
@@ -1476,6 +1539,17 @@ body.vibe-prismatic .demo-presenter-chips span {
   line-height: 1.6;
   margin: 0 auto;
   max-width: 840px;
+}
+
+.demo-handoff-card ul {
+  margin: 0 auto;
+  max-width: 840px;
+  padding-left: 28px;
+  text-align: left;
+}
+
+.demo-handoff-card li {
+  margin: 8px 0;
 }
 
 .demo-handoff-steps {

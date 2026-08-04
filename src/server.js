@@ -36,7 +36,7 @@ const sampleWorkbookPath = path.join(projectRoot, "input", "sample-sprint-demo.x
 const lobbyDistDir = path.join(projectRoot, "apps", "lobby", "dist");
 const lobbyIndexPath = path.join(lobbyDistDir, "index.html");
 const maxUploadBytes = 8 * 1024 * 1024;
-const maxScreenshotBytes = 5 * 1024 * 1024;
+const maxScreenshotBytes = 12 * 1024 * 1024;
 const maxJobAgeMs = 6 * 60 * 60 * 1000;
 const adoConfig = getAdoConfig();
 const defaultAdoTeam = process.env.ADO_DEFAULT_TEAM || "(Team7) - Sales Value Stream - Vital Signs";
@@ -508,8 +508,8 @@ function renderPage({ title, bodyClass = "", content }) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css?v=6">
-  <script src="/assets/review-builder.js?v=2" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=9">
+  <script src="/assets/review-builder.js?v=5" defer></script>
 </head>
 <body class="${escapeHtml(bodyClass)}">
   <div class="confetti-sprinkle" aria-hidden="true"></div>
@@ -1235,8 +1235,18 @@ async function queryIterationWorkItemsForAreas({ pat, org, project, team, iterat
 function splitBullets(value) {
   return String(value || "")
     .split(/\r?\n/)
-    .map((line) => line.trim().replace(/^[-*]\s*/, ""))
+    .map((line) => line.trim().replace(/^[-*•]\s*/, ""))
     .filter(Boolean);
+}
+
+function bodyTextFromSection(section) {
+  const rawBody = section && section.bodyText;
+
+  if (typeof rawBody === "string" && rawBody.trim()) {
+    return rawBody.trim();
+  }
+
+  return Array.isArray(section && section.bullets) ? section.bullets.join("\n").trim() : "";
 }
 
 function splitNames(value) {
@@ -1409,6 +1419,40 @@ function renderBulletList(bullets, emptyText = "") {
   return `<ul>${bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join("")}</ul>`;
 }
 
+function renderBodyText(value, emptyText = "") {
+  const raw = String(value || "").trim();
+
+  if (!raw) {
+    return emptyText ? `<p>${escapeHtml(emptyText)}</p>` : "";
+  }
+
+  const blocks = raw
+    .split(/\r?\n\s*\r?\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  if (blocks.length > 1) {
+    return blocks
+      .map((block) => `<p>${escapeHtml(block.replace(/\s*\r?\n\s*/g, " "))}</p>`)
+      .join("");
+  }
+
+  const lines = blocks[0]
+    .split(/\r?\n/)
+    .map((line) => line.trim().replace(/^[-*•]\s*/, ""))
+    .filter(Boolean);
+
+  if (lines.length > 1) {
+    return renderBulletList(lines, emptyText);
+  }
+
+  return `<p>${escapeHtml(lines[0] || blocks[0])}</p>`;
+}
+
+function renderSectionBodyText(section, emptyText = "") {
+  return renderBodyText(bodyTextFromSection(section), emptyText);
+}
+
 function defaultSummaryText(result) {
   const totals = (result.metrics && result.metrics.totals) || {};
   const parts = [
@@ -1524,6 +1568,7 @@ function createDefaultReviewSection(type, index = 0, id = "") {
     id: sectionId,
     type: normalizedType,
     title: "",
+    bodyText: "",
     bullets: [],
     businessValue: ""
   };
@@ -1606,7 +1651,11 @@ function normalizeReviewSection(section, index = 0) {
     return normalized;
   }
 
-  normalized.bullets = Array.isArray(source.bullets) ? source.bullets.map((bullet) => String(bullet || "").trim()).filter(Boolean) : [];
+  normalized.bodyText = String(source.bodyText || "").trim();
+  if (!normalized.bodyText && Array.isArray(source.bullets)) {
+    normalized.bodyText = source.bullets.map((bullet) => String(bullet || "").trim()).filter(Boolean).join("\n");
+  }
+  normalized.bullets = splitBullets(normalized.bodyText);
   normalized.businessValue = String(source.businessValue || "").trim();
 
   if (type === "delivery") {
@@ -1634,15 +1683,15 @@ function reviewSectionHasContent(section) {
   }
 
   if (section.type === "screenshot") {
-    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.imageData);
+    return Boolean(section.title || section.bodyText || section.bullets.length > 0 || section.businessValue || section.imageData);
   }
 
   if (section.type === "delivery") {
-    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.stories.length > 0 || section.priority);
+    return Boolean(section.title || section.bodyText || section.bullets.length > 0 || section.businessValue || section.stories.length > 0 || section.priority);
   }
 
   if (section.type === "next_steps") {
-    return Boolean(section.title || section.bullets.length > 0 || section.businessValue || section.stories.length > 0);
+    return Boolean(section.title || section.bodyText || section.bullets.length > 0 || section.businessValue || section.stories.length > 0);
   }
 
   if (section.type === "live_demo") {
@@ -1654,7 +1703,7 @@ function reviewSectionHasContent(section) {
     );
   }
 
-  return Boolean(section.title || section.bullets.length > 0 || section.businessValue);
+  return Boolean(section.title || section.bodyText || section.bullets.length > 0 || section.businessValue);
 }
 
 function normalizeNarrativeSections(narrative) {
@@ -1672,6 +1721,7 @@ function normalizeNarrativeSections(narrative) {
       id: "next-steps-legacy",
       type: "next_steps",
       title: currentNarrative.nextSteps && currentNarrative.nextSteps.title,
+      bodyText: currentNarrative.nextSteps && currentNarrative.nextSteps.bodyText,
       bullets: currentNarrative.nextSteps && currentNarrative.nextSteps.bullets,
       stories: currentNarrative.nextSteps && currentNarrative.nextSteps.stories
     },
@@ -1722,6 +1772,7 @@ function nextStepsFromSections(sections) {
   if (!section) {
     return {
       title: "",
+      bodyText: "",
       bullets: [],
       stories: []
     };
@@ -1729,6 +1780,7 @@ function nextStepsFromSections(sections) {
 
   return {
     title: section.title || "",
+    bodyText: bodyTextFromSection(section),
     bullets: Array.isArray(section.bullets) ? section.bullets : [],
     stories: Array.isArray(section.stories) ? section.stories : []
   };
@@ -1846,7 +1898,8 @@ function parseSectionFromRequest({ body, files, id, index, currentItems, nextIte
     return section;
   }
 
-  section.bullets = splitBullets(body[sectionFieldName("bullets", id)]);
+  section.bodyText = String(body[sectionFieldName("bullets", id)] || "").trim();
+  section.bullets = splitBullets(section.bodyText);
   section.businessValue = String(body[sectionFieldName("businessValue", id)] || "").trim();
 
   if (type === "delivery") {
@@ -2077,12 +2130,12 @@ function renderDeliverySectionEditor(section, draft) {
       </label>
     </div>
     <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
-      <span>Bullet points</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+      <span>Body text</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="Press Enter for bullets. Leave a blank line for paragraphs.">${escapeHtml(bodyTextFromSection(section))}</textarea>
     </label>
     <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
       <span>Business value</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this mattered for users, stakeholders, or operations">${escapeHtml(section.businessValue || "")}</textarea>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this mattered. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.businessValue || "")}</textarea>
     </label>
     ${renderStoryPicker({
       title: "Attach selected sprint ADO stories",
@@ -2111,12 +2164,12 @@ function renderScreenshotSectionEditor(section) {
       </div>
       <div class="screenshot-copy-fields">
         <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
-          <span>Side bullets</span>
-          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+          <span>Side text</span>
+          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="Press Enter for bullets. Leave a blank line for paragraphs.">${escapeHtml(bodyTextFromSection(section))}</textarea>
         </label>
         <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
           <span>Business value</span>
-          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this screenshot matters">${escapeHtml(section.businessValue || "")}</textarea>
+          <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this screenshot matters. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.businessValue || "")}</textarea>
         </label>
       </div>
     </div>
@@ -2129,12 +2182,12 @@ function renderChallengeSectionEditor(section) {
   return `
     ${renderCommonSectionFields(section)}
     <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
-      <span>Challenge bullets</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="One challenge or learning per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+      <span>Challenge text</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="4" placeholder="Press Enter for bullets. Leave a blank line for paragraphs.">${escapeHtml(bodyTextFromSection(section))}</textarea>
     </label>
     <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
       <span>Impact or response</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="How the team responded or what stakeholders should know">${escapeHtml(section.businessValue || "")}</textarea>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="How the team responded. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.businessValue || "")}</textarea>
     </label>
   `;
 }
@@ -2146,7 +2199,7 @@ function renderRiskSectionEditor(section) {
     ${renderCommonSectionFields(section)}
     <label class="field-group" for="${escapeHtml(sectionFieldName("description", id))}">
       <span>Description</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("description", id))}" name="${escapeHtml(sectionFieldName("description", id))}" rows="3" placeholder="What could happen and why it matters">${escapeHtml(section.description || "")}</textarea>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("description", id))}" name="${escapeHtml(sectionFieldName("description", id))}" rows="3" placeholder="What could happen. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.description || "")}</textarea>
     </label>
     <div class="risk-editor-grid">
       <label class="field-group">
@@ -2182,7 +2235,7 @@ function renderRiskSectionEditor(section) {
       </label>
       <label class="field-group" for="${escapeHtml(sectionFieldName("notes", id))}">
         <span>Notes</span>
-        <input class="text-input" id="${escapeHtml(sectionFieldName("notes", id))}" name="${escapeHtml(sectionFieldName("notes", id))}" type="text" value="${escapeHtml(section.notes || "")}" placeholder="Example: Mitigation plan is in motion">
+        <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("notes", id))}" name="${escapeHtml(sectionFieldName("notes", id))}" rows="2" placeholder="Press Enter for bullets. Leave a blank line for paragraphs.">${escapeHtml(section.notes || "")}</textarea>
       </label>
     </div>
   `;
@@ -2194,12 +2247,12 @@ function renderNextStepsSectionEditor(section, draft) {
   return `
     ${renderCommonSectionFields(section)}
     <label class="field-group" for="${escapeHtml(sectionFieldName("bullets", id))}">
-      <span>Next steps bullets</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="One bullet per line">${escapeHtml((section.bullets || []).join("\n"))}</textarea>
+      <span>Next steps text</span>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("bullets", id))}" name="${escapeHtml(sectionFieldName("bullets", id))}" rows="5" placeholder="Press Enter for bullets. Leave a blank line for paragraphs.">${escapeHtml(bodyTextFromSection(section))}</textarea>
     </label>
     <label class="field-group" for="${escapeHtml(sectionFieldName("businessValue", id))}">
       <span>Context for stakeholders</span>
-      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this is the right next focus">${escapeHtml(section.businessValue || "")}</textarea>
+      <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("businessValue", id))}" name="${escapeHtml(sectionFieldName("businessValue", id))}" rows="3" placeholder="Why this is the right next focus. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.businessValue || "")}</textarea>
     </label>
     ${renderStoryPicker({
       title: "Attach next sprint ADO stories",
@@ -2231,7 +2284,7 @@ function renderLiveDemoSectionEditor(section) {
       </label>
       <label class="field-group" for="${escapeHtml(sectionFieldName("note", id))}">
         <span>Demo note</span>
-        <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("note", id))}" name="${escapeHtml(sectionFieldName("note", id))}" rows="3" placeholder="Example: Product owner will demo the workflow.">${escapeHtml(section.note || "")}</textarea>
+        <textarea class="text-input narrative-textarea" id="${escapeHtml(sectionFieldName("note", id))}" name="${escapeHtml(sectionFieldName("note", id))}" rows="3" placeholder="Example: Product owner will demo the workflow. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(section.note || "")}</textarea>
       </label>
     </div>
   `;
@@ -2422,7 +2475,7 @@ function renderAdoReviewBuilderContent({
           </div>
           <label class="field-group" for="summary">
             <span>Sprint summary</span>
-            <textarea class="text-input narrative-textarea" id="summary" name="summary" rows="5">${escapeHtml(summaryText)}</textarea>
+            <textarea class="text-input narrative-textarea" id="summary" name="summary" rows="5" placeholder="Summarize the sprint. Press Enter for bullets or leave a blank line for paragraphs.">${escapeHtml(summaryText)}</textarea>
           </label>
         </section>
 
@@ -2491,7 +2544,7 @@ function renderAdoReviewBuilderPage({
 }
 
 function renderAdoReportBusinessValue(value) {
-  return value ? `<div class="business-value-box"><span>Business value</span><p>${escapeHtml(value)}</p></div>` : "";
+  return value ? `<div class="business-value-box"><span>Business value</span>${renderBodyText(value)}</div>` : "";
 }
 
 function renderAdoReportDeliverySection(section, index) {
@@ -2501,7 +2554,7 @@ function renderAdoReportDeliverySection(section, index) {
         <h3>${escapeHtml(section.title || `Delivery update ${index + 1}`)}</h3>
         ${section.priority ? `<span>#1 priority</span>` : ""}
       </div>
-      ${renderBulletList(section.bullets, "No bullet points were added for this update.")}
+      ${renderSectionBodyText(section, "No body text was added for this update.")}
       ${renderAdoReportBusinessValue(section.businessValue)}
       ${
         section.stories && section.stories.length > 0
@@ -2529,7 +2582,7 @@ function renderAdoReportScreenshotSection(section) {
           ${section.imageData ? `<img src="${escapeHtml(section.imageData)}" alt="${escapeHtml(section.title || "Review screenshot")}">` : `<div class="empty-state">No screenshot was added.</div>`}
         </div>
         <div class="screenshot-report-copy">
-          ${renderBulletList(section.bullets, "No screenshot notes were added.")}
+          ${renderSectionBodyText(section, "No screenshot notes were added.")}
           ${renderAdoReportBusinessValue(section.businessValue)}
         </div>
       </div>
@@ -2547,7 +2600,7 @@ function renderAdoReportChallengeSection(section) {
           <h3>${escapeHtml(section.title || "Challenge")}</h3>
         </div>
       </div>
-      ${renderBulletList(section.bullets, "No challenge notes were added.")}
+      ${renderSectionBodyText(section, "No challenge notes were added.")}
       ${renderAdoReportBusinessValue(section.businessValue)}
     </article>
   `;
@@ -2565,7 +2618,7 @@ function renderAdoReportRiskSection(section) {
           <h3>${escapeHtml(section.title || "Risk")}</h3>
         </div>
       </div>
-      ${section.description ? `<p>${escapeHtml(section.description)}</p>` : `<p>No risk description was added.</p>`}
+      ${renderBodyText(section.description, "No risk description was added.")}
       <div class="risk-heatmap-row">
         <span>Impact: ${escapeHtml(riskScaleLabel(section.impact))}</span>
         <span>Likelihood: ${escapeHtml(riskScaleLabel(section.likelihood))}</span>
@@ -2575,7 +2628,7 @@ function renderAdoReportRiskSection(section) {
         section.owner || section.notes
           ? `<div class="risk-owner-notes">
               ${section.owner ? `<span>Owner: ${escapeHtml(section.owner)}</span>` : ""}
-              ${section.notes ? `<span>${escapeHtml(section.notes)}</span>` : ""}
+              ${section.notes ? `<div class="risk-notes-copy">${renderBodyText(section.notes)}</div>` : ""}
             </div>`
           : ""
       }
@@ -2595,7 +2648,7 @@ function renderAdoReportNextStepsSection(section, nextIteration) {
       </div>
       <div class="ado-report-next-grid${section.stories && section.stories.length > 0 ? "" : " single"}">
         <div class="next-copy-panel">
-          ${renderBulletList(section.bullets, "No next-step bullets were added.")}
+          ${renderSectionBodyText(section, "No next-step details were added.")}
           ${renderAdoReportBusinessValue(section.businessValue)}
         </div>
         ${
@@ -2631,7 +2684,7 @@ function renderAdoReportLiveDemoSection(section) {
             </div>`
           : ""
       }
-      ${section.note ? `<p>${escapeHtml(section.note)}</p>` : ""}
+      ${section.note ? renderBodyText(section.note) : ""}
     </article>
   `;
 }
@@ -2687,7 +2740,7 @@ function renderAdoNextSteps(nextSteps, nextIteration) {
       <div class="next-copy-panel">
         <span>${escapeHtml(nextIteration ? nextIteration.name : "Looking ahead")}</span>
         <h3>${escapeHtml(nextSteps.title || "Looking ahead")}</h3>
-        ${renderBulletList(nextSteps.bullets, "No next-step bullets were added.")}
+        ${renderBodyText(nextSteps.bodyText || (nextSteps.bullets || []).join("\n"), "No next-step details were added.")}
       </div>
       ${
         nextSteps.stories && nextSteps.stories.length > 0
@@ -2723,7 +2776,7 @@ function renderAdoDemoSection(demo) {
               </div>`
             : ""
         }
-        <p>${escapeHtml(demo.note || "This sprint review includes a live demo.")}</p>
+        ${renderBodyText(demo.note || "This sprint review includes a live demo.")}
       </div>
     </section>
   `;
@@ -2861,12 +2914,23 @@ function renderAdoReportStyles() {
       margin: 0;
       max-width: 920px;
     }
-    .ado-report-hero p {
+    .ado-report-summary {
+      margin-top: 22px;
+      max-width: 900px;
+    }
+    .ado-report-summary p,
+    .ado-report-summary li {
       font-size: 1.06rem;
       font-weight: 650;
       line-height: 1.65;
-      margin: 22px 0 0;
-      max-width: 900px;
+    }
+    .ado-report-summary p {
+      margin: 0;
+    }
+    .ado-report-summary p + p,
+    .ado-report-summary ul + p,
+    .ado-report-summary p + ul {
+      margin-top: 12px;
     }
     .hero-facts {
       display: grid;
@@ -3241,6 +3305,9 @@ function renderAdoReportStyles() {
       gap: 10px;
       margin-top: 12px;
     }
+    .risk-notes-copy {
+      flex-basis: 100%;
+    }
     .ado-report-update-card.priority {
       border-left-color: #ffd166;
       box-shadow: 0 18px 42px rgba(255, 209, 102, .22);
@@ -3278,12 +3345,27 @@ function renderAdoReportStyles() {
       padding: 18px;
       position: relative;
     }
-    .business-value-box p {
+    .business-value-box p,
+    .business-value-box li,
+    .risk-notes-copy p,
+    .risk-notes-copy li {
       color: #3a2a05;
       font-size: 1rem;
       font-weight: 750;
       line-height: 1.55;
       margin: 0;
+    }
+    .risk-notes-copy p,
+    .risk-notes-copy li {
+      color: #10212c;
+    }
+    .business-value-box p + p,
+    .business-value-box ul + p,
+    .business-value-box p + ul,
+    .risk-notes-copy p + p,
+    .risk-notes-copy ul + p,
+    .risk-notes-copy p + ul {
+      margin-top: 10px;
     }
     .story-evidence {
       margin-top: 16px;
@@ -3602,7 +3684,7 @@ function renderAdoReportHtml(report) {
     <header class="ado-report-hero">
       <span>SprintGen ADO report</span>
       <h1>${escapeHtml(result.iteration.name)}</h1>
-      <p>${escapeHtml(summary)}</p>
+      <div class="ado-report-summary">${renderBodyText(summary)}</div>
       <div class="hero-facts">
         <div><span>Team</span><strong>${escapeHtml(result.team)}</strong></div>
         <div><span>Work areas</span><strong>${escapeHtml(areaPathDisplay(normalizeAreaPathList(result.areaPaths, result.areaPath)))}</strong></div>
@@ -4328,10 +4410,11 @@ function renderAdoAdminPage({
                 </label>
                 <label class="field-group" for="areaPaths">
                   <span>Work areas</span>
-                  <select class="text-input area-multi-select" id="areaPaths" name="areaPaths" multiple required data-area-select${selectedTeam ? "" : " disabled"}>
+                  <select class="text-input area-multi-select area-native-select" id="areaPaths" name="areaPaths" multiple required data-area-select${selectedTeam ? "" : " disabled"}>
                     ${renderAreaOptions(areaPaths, selectedAreaPaths)}
                   </select>
-                  <small>Choose one or more value areas for this combined review. Use Ctrl or Shift to select more than one.</small>
+                  <div class="area-choice-grid" data-area-checks aria-live="polite"></div>
+                  <small data-area-helper>Choose the value areas included in this review.</small>
                 </label>
               </div>
             </div>
@@ -4366,6 +4449,8 @@ function renderAdoAdminPage({
           var status = form.querySelector("[data-scope-status]");
           var buildCopy = form.querySelector("[data-build-copy]");
           var builderMount = document.querySelector("[data-inline-builder]");
+          var areaCheckList = form.querySelector("[data-area-checks]");
+          var areaHelper = form.querySelector("[data-area-helper]");
           var lastBuilderKey = "";
           form.classList.add("is-inline-builder-enabled");
 
@@ -4404,6 +4489,10 @@ function renderAdoAdminPage({
               }
               select.appendChild(option);
             });
+
+            if (select === areaSelect) {
+              renderAreaChoices();
+            }
           }
 
           function getSelectedAreaPaths() {
@@ -4412,11 +4501,97 @@ function renderAdoAdminPage({
               .filter(Boolean);
           }
 
+          function areaShortLabel(value) {
+            var parts = String(value || "").split("\\\\").filter(Boolean);
+            return parts[parts.length - 1] || value || "Work area";
+          }
+
+          function areaParentLabel(value) {
+            var parts = String(value || "").split("\\\\").filter(Boolean);
+            return parts.length > 1 ? parts.slice(0, -1).join(" / ") : "";
+          }
+
+          function syncAreaChoiceState() {
+            if (!areaCheckList) return;
+
+            var selected = getSelectedAreaPaths();
+            var selectedSet = new Set(selected);
+            areaCheckList.querySelectorAll("[data-area-choice]").forEach(function (choice) {
+              var checked = selectedSet.has(choice.value);
+              choice.checked = checked;
+              choice.closest(".area-choice-card").classList.toggle("is-selected", checked);
+            });
+
+            if (areaHelper) {
+              areaHelper.textContent = selected.length
+                ? selected.length + " work area" + (selected.length === 1 ? "" : "s") + " selected."
+                : "Choose the value areas included in this review.";
+            }
+          }
+
+          function renderAreaChoices() {
+            if (!areaCheckList) return;
+
+            var options = Array.prototype.slice.call(areaSelect.options || []).filter(function (option) {
+              return option.value;
+            });
+
+            areaCheckList.innerHTML = "";
+
+            if (options.length === 0) {
+              var empty = document.createElement("div");
+              empty.className = "area-choice-empty";
+              empty.textContent = areaSelect.disabled ? "Choose a team to load work areas." : "No work areas found for this team.";
+              areaCheckList.appendChild(empty);
+              if (areaHelper) areaHelper.textContent = "Choose the value areas included in this review.";
+              return;
+            }
+
+            options.forEach(function (option, index) {
+              var label = document.createElement("label");
+              label.className = "area-choice-card";
+
+              var input = document.createElement("input");
+              input.type = "checkbox";
+              input.value = option.value;
+              input.checked = option.selected;
+              input.disabled = areaSelect.disabled;
+              input.setAttribute("data-area-choice", "");
+              input.setAttribute("aria-describedby", "area-choice-detail-" + index);
+
+              var text = document.createElement("span");
+              text.className = "area-choice-text";
+
+              var strong = document.createElement("strong");
+              strong.textContent = areaShortLabel(option.value);
+
+              var small = document.createElement("small");
+              small.id = "area-choice-detail-" + index;
+              small.textContent = areaParentLabel(option.value);
+
+              text.appendChild(strong);
+              if (small.textContent) text.appendChild(small);
+              label.appendChild(input);
+              label.appendChild(text);
+              areaCheckList.appendChild(label);
+            });
+
+            syncAreaChoiceState();
+          }
+
+          function setAreaSelectValues(values) {
+            var selected = new Set(values || []);
+            Array.prototype.slice.call(areaSelect.options || []).forEach(function (option) {
+              option.selected = selected.has(option.value);
+            });
+            syncAreaChoiceState();
+          }
+
           function updateBuildState() {
             var ready = Boolean(teamSelect.value && getSelectedAreaPaths().length > 0 && sprintSelect.value);
             if (buildCopy) {
               buildCopy.textContent = ready
-                ? "Scrum Studio is loading the review builder below."
+                ? "Builder will refresh when sprint or work areas change."
                 : "Choose sprint and work areas. Scrum Studio will load the builder below.";
             }
           }
@@ -4428,6 +4603,23 @@ function renderAdoAdminPage({
             box.className = "inline-builder-message" + (tone ? " " + tone : "");
             box.textContent = message;
             builderMount.appendChild(box);
+          }
+
+          function scrollBuilderIntoView() {
+            if (!builderMount) return;
+
+            var motionQuery = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+            var behavior = motionQuery && motionQuery.matches ? "auto" : "smooth";
+
+            window.requestAnimationFrame(function () {
+              window.requestAnimationFrame(function () {
+                var top = builderMount.getBoundingClientRect().top + window.pageYOffset - 18;
+                window.scrollTo({
+                  top: Math.max(0, top),
+                  behavior: behavior
+                });
+              });
+            });
           }
 
           function clearBuilder() {
@@ -4477,6 +4669,7 @@ function renderAdoAdminPage({
             lastBuilderKey = key;
             setStatus("Building review...", "good");
             setBuilderMessage("Loading stories, metrics, and next-sprint context...");
+            scrollBuilderIntoView();
 
             var body = new URLSearchParams();
             body.set("team", teamSelect.value);
@@ -4516,6 +4709,10 @@ function renderAdoAdminPage({
               }
 
               setStatus("Builder ready below.", "good");
+              if (buildCopy) {
+                buildCopy.textContent = "Builder ready below.";
+              }
+              scrollBuilderIntoView();
             } catch (error) {
               lastBuilderKey = "";
               setStatus(error.message, "error");
@@ -4528,6 +4725,7 @@ function renderAdoAdminPage({
             setOptions(sprintSelect, [], "Select a sprint", function () { return ""; }, function () { return ""; });
             areaSelect.disabled = true;
             sprintSelect.disabled = true;
+            renderAreaChoices();
             details.classList.remove("is-open");
             details.setAttribute("aria-hidden", "true");
             setStatus(message || "Team selection unlocks sprint details.");
@@ -4565,6 +4763,7 @@ function renderAdoAdminPage({
 
             areaSelect.disabled = areas.length === 0;
             sprintSelect.disabled = iterations.length === 0;
+            renderAreaChoices();
             details.classList.add("is-open");
             details.removeAttribute("aria-hidden");
             setStatus("Sprint details ready.", "good");
@@ -4602,9 +4801,22 @@ function renderAdoAdminPage({
             loadScope(teamSelect.value);
           });
           areaSelect.addEventListener("change", function () {
+            syncAreaChoiceState();
             updateBuildState();
             loadInlineBuilder();
           });
+          if (areaCheckList) {
+            areaCheckList.addEventListener("change", function (event) {
+              if (!event.target.matches("[data-area-choice]")) return;
+
+              var values = Array.prototype.slice.call(areaCheckList.querySelectorAll("[data-area-choice]:checked"))
+                .map(function (input) { return input.value; })
+                .filter(Boolean);
+              setAreaSelectValues(values);
+              updateBuildState();
+              loadInlineBuilder();
+            });
+          }
           sprintSelect.addEventListener("change", function () {
             updateBuildState();
             loadInlineBuilder();
@@ -4660,7 +4872,7 @@ function renderAdoPresentationDeliverySlide(section, index) {
         <h2>${escapeHtml(section.title || `Delivery update ${index + 1}`)}</h2>
         <div class="present-narrative-grid single delivery-update-layout">
           <div class="present-copy-block">
-            ${renderBulletList(section.bullets, "No bullet points were added for this update.")}
+            ${renderSectionBodyText(section, "No body text was added for this update.")}
             ${
               section.stories && section.stories.length > 0
                 ? `<div class="delivery-story-pill">${renderStoryChips(section.stories)}</div>`
@@ -4668,7 +4880,7 @@ function renderAdoPresentationDeliverySlide(section, index) {
             }
             ${
               section.businessValue
-                ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                ? `<div class="present-business-value"><span>Business Value</span>${renderBodyText(section.businessValue)}</div>`
                 : ""
             }
           </div>
@@ -4689,10 +4901,10 @@ function renderAdoPresentationScreenshotSlide(section) {
             ${section.imageData ? `<img src="${escapeHtml(section.imageData)}" alt="${escapeHtml(section.title || "Review screenshot")}">` : `<p class="present-empty">No screenshot was added.</p>`}
           </div>
           <div class="present-copy-block">
-            ${renderBulletList(section.bullets, "No screenshot notes were added.")}
+            ${renderSectionBodyText(section, "No screenshot notes were added.")}
             ${
               section.businessValue
-                ? `<div class="present-business-value"><span>Business Value</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                ? `<div class="present-business-value"><span>Business Value</span>${renderBodyText(section.businessValue)}</div>`
                 : ""
             }
           </div>
@@ -4712,10 +4924,10 @@ function renderAdoPresentationChallengeSlide(section) {
           <h2>${escapeHtml(section.title || "Challenge")}</h2>
         </div>
         <div class="present-copy-block">
-          ${renderBulletList(section.bullets, "No challenge notes were added.")}
+          ${renderSectionBodyText(section, "No challenge notes were added.")}
           ${
             section.businessValue
-              ? `<div class="present-business-value"><span>Response</span><p>${escapeHtml(section.businessValue)}</p></div>`
+              ? `<div class="present-business-value"><span>Response</span>${renderBodyText(section.businessValue)}</div>`
               : ""
           }
         </div>
@@ -4737,10 +4949,13 @@ function renderAdoPresentationRiskSlide(section) {
         </div>
         <div class="present-risk-grid">
           <div class="present-copy-block">
-            <p>${escapeHtml(section.description || "No risk description was added.")}</p>
+            ${renderBodyText(section.description, "No risk description was added.")}
             ${
               section.owner || section.notes
-                ? `<p class="present-risk-notes">${escapeHtml([section.owner ? `Owner: ${section.owner}` : "", section.notes || ""].filter(Boolean).join(" - "))}</p>`
+                ? `<div class="present-risk-notes">
+                    ${section.owner ? `<span>Owner: ${escapeHtml(section.owner)}</span>` : ""}
+                    ${section.notes ? renderBodyText(section.notes) : ""}
+                  </div>`
                 : ""
             }
           </div>
@@ -4763,10 +4978,10 @@ function renderAdoPresentationNextStepsSlide(section, nextIteration) {
         <h2>${escapeHtml(section.title || (nextIteration && nextIteration.name) || "What is next")}</h2>
         <div class="present-narrative-grid${section.stories && section.stories.length > 0 ? "" : " single"}">
           <div class="present-copy-block">
-            ${renderBulletList(section.bullets, "No next-step bullets were added.")}
+            ${renderSectionBodyText(section, "No next-step details were added.")}
             ${
               section.businessValue
-                ? `<div class="present-business-value"><span>Context</span><p>${escapeHtml(section.businessValue)}</p></div>`
+                ? `<div class="present-business-value"><span>Context</span>${renderBodyText(section.businessValue)}</div>`
                 : ""
             }
           </div>
@@ -4837,7 +5052,7 @@ function renderAdoPresentationDemoSlide(demo) {
               </div>`
             : ""
         }
-        ${demo.note ? `<p>${escapeHtml(demo.note)}</p>` : ""}
+        ${demo.note ? renderBodyText(demo.note) : ""}
       </div>
     </section>
   `;
@@ -4933,7 +5148,7 @@ function renderAdoPresentationPage(report, vibeInput) {
           <span class="present-kicker">Sprint Review</span>
           <h2>${escapeHtml(narrative.openingTitle || "Opening Remarks")}</h2>
           ${narrative.openingSubtitle ? `<p class="present-subtitle">${escapeHtml(narrative.openingSubtitle)}</p>` : ""}
-          <p class="present-summary">${escapeHtml(summary)}</p>
+          <div class="present-summary">${renderBodyText(summary)}</div>
         </div>
       </section>
     `
@@ -4983,7 +5198,7 @@ function renderAdoPresentationPage(report, vibeInput) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/ado-present.css?v=18">
+  <link rel="stylesheet" href="/assets/ado-present.css?v=19">
 </head>
 <body class="vibe-${escapeHtml(vibe)}">
   <div class="present-progress" aria-hidden="true"><span></span></div>
@@ -5352,6 +5567,14 @@ if (fs.existsSync(lobbyDistDir)) {
   app.use("/lobby", express.static(lobbyDistDir, { maxAge: 0 }));
 }
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    app: "Scrum Studio",
+    time: new Date().toISOString()
+  });
+});
 
 app.get("/api/weather", async (req, res) => {
   const location = parseWeatherLocation(req.query.location);
@@ -6146,7 +6369,7 @@ app.use((error, req, res, next) => {
   removeJob(req.jobId);
 
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-    res.status(400).send(renderErrorPage("That upload is too large. Workbooks are limited to 8 MB and review screenshots are limited to 5 MB."));
+    res.status(400).send(renderErrorPage("That upload is too large. Workbooks are limited to 8 MB and review screenshots are limited to 12 MB. Your browser draft should still be saved; go back to the builder, let Scrum Studio compress the screenshot, and try again."));
     return;
   }
 
