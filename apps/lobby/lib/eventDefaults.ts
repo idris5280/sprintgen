@@ -1,8 +1,6 @@
 import type {
   LobbyConfig,
   LobbyTheme,
-  MusicMood,
-  MusicTrack,
   ScrumEventType,
   TeamLocation,
 } from "@/types";
@@ -42,7 +40,6 @@ export const DEFAULT_TEAM_LOCATIONS: TeamLocation[] = [
 export interface EventDefaults {
   label: string;
   theme: LobbyTheme;
-  mood: MusicMood;
   prompt: string;
   description: string;
 }
@@ -51,35 +48,30 @@ export const EVENT_DEFAULTS: Record<ScrumEventType, EventDefaults> = {
   "daily-standup": {
     label: "Daily Standup",
     theme: "standup-light",
-    mood: "light-upbeat",
     prompt: "What changed since yesterday?",
     description: "Clean, fast, minimal",
   },
   "sprint-planning": {
     label: "Sprint Planning",
     theme: "planning-energy",
-    mood: "focus-creative",
     prompt: "What outcome matters most this sprint?",
     description: "Energetic, creative",
   },
   "sprint-review": {
     label: "Sprint Review",
     theme: "executive-review",
-    mood: "none",
     prompt: "What did we deliver?",
     description: "Polished, stakeholder-ready",
   },
   retrospective: {
     label: "Retrospective",
     theme: "retro-calm",
-    mood: "ambient",
     prompt: "What should we start, stop, or continue?",
     description: "Soft, reflective, safe",
   },
   "backlog-refinement": {
     label: "Backlog Refinement",
     theme: "focus-mode",
-    mood: "low-distraction-focus",
     prompt: "What needs clarity before planning?",
     description: "Focused, low-distraction",
   },
@@ -91,54 +83,6 @@ export const THEME_OPTIONS: { value: LobbyTheme; label: string }[] = [
   { value: "executive-review", label: "Executive" },
   { value: "retro-calm", label: "Calm" },
   { value: "focus-mode", label: "Focus" },
-];
-
-export const SEEDED_TRACKS: MusicTrack[] = [
-  {
-    id: "track-standup-1",
-    title: "Morning Momentum",
-    artist: "Tidewave",
-    ceremonyType: "daily-standup",
-    mood: "light-upbeat",
-    src: "",
-    isAvailable: false,
-  },
-  {
-    id: "track-planning-1",
-    title: "Blueprint",
-    artist: "North Loop",
-    ceremonyType: "sprint-planning",
-    mood: "focus-creative",
-    src: "",
-    isAvailable: false,
-  },
-  {
-    id: "track-review-1",
-    title: "Quiet Wins",
-    artist: "Halcyon",
-    ceremonyType: "sprint-review",
-    mood: "none",
-    src: "",
-    isAvailable: false,
-  },
-  {
-    id: "track-retro-1",
-    title: "Soft Horizons",
-    artist: "Kestrel",
-    ceremonyType: "retrospective",
-    mood: "ambient",
-    src: "",
-    isAvailable: false,
-  },
-  {
-    id: "track-refinement-1",
-    title: "Deep Channel",
-    artist: "Atlas Field",
-    ceremonyType: "backlog-refinement",
-    mood: "low-distraction-focus",
-    src: "",
-    isAvailable: false,
-  },
 ];
 
 export const DEFAULT_CONFIG: LobbyConfig = {

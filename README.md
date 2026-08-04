@@ -58,8 +58,8 @@ From the browser, scrum masters can:
 - Choose the team, work area, and sprint in a guided flow.
 - Open the Sprint Review Builder directly.
 - Review ADO-calculated metrics, burndown, velocity, and work items.
-- Type summary, delivery updates, business value, and next steps on screen.
-- Attach real ADO stories to delivery updates and next-sprint plans.
+- Type summary, delivery sections, screenshots, challenges, risks, business value, and next steps on screen.
+- Attach real ADO stories to delivery sections, next steps, Training, and UAT readiness.
 - Generate an ADO-backed standalone HTML report and Presentation Mode.
 - Open the HTML preview.
 - Download the standalone HTML report.
@@ -126,14 +126,16 @@ The Sprint Review Builder lets the scrum master:
 - select the exact area path and sprint/iteration path
 - open the review builder directly
 - type the executive summary
-- create up to three delivery updates
-- add bullet points and business value for each update
+- add, remove, and reorder review sections
+- create delivery updates, screenshot slides, challenges, risks, next steps, and live demo slides
+- add bullet points, paragraphs, and business value to review sections
 - mark an update as `#1 priority`
 - attach completed ADO stories/bugs to each delivery update
 - mark whether the review includes a live demo handoff
 - edit the opening remarks title/subtitle for Presentation Mode
 - see the next sprint's ADO stories when the team iteration exists
 - attach next sprint stories to the Looking Ahead section
+- flag stories expected for Training or UAT readiness
 - generate the ADO-backed standalone HTML report and Presentation Mode
 
 The ADO metrics flow is scoped by team, area path, and iteration path. It currently calculates:
@@ -170,9 +172,10 @@ The ADO presentation breaks the selected sprint review into full-screen sections
 - agile metrics story point trend
 - 3-sprint velocity
 - sprint review summary
-- one slide per delivery update
-- optional dotted `Live Demo` pause slide
+- one slide per review section
+- optional `Live Demo` slide with presenters
 - looking-ahead slide with selected next sprint ADO stories
+- stakeholder readiness slide for Training and UAT
 - open-floor questions and feedback closing slide
 
 If many ADO stories are selected under one update, SprintGen compacts them into a summary and dense story grid so the presentation remains readable on screen. Empty ADO story sections are hidden. Velocity bars animate each time the velocity slide becomes active, and motion is reduced for users who prefer reduced motion.
@@ -187,51 +190,32 @@ Security behavior:
 
 Generated jobs store ADO facts and the approved narrative, not the PAT. Runtime presentation links are temporary same-day links; the downloaded standalone HTML report is the durable artifact.
 
-## Live Azure App
-
-The current hosted MVP is available at:
-
-```text
-https://sprintgen.orangeriver-b6b98f37.eastus.azurecontainerapps.io/
-```
-
-Azure resources:
-
-- Resource group: `sprintgen-rg`
-- Container Apps environment: `sprintgen-env`
-- Container App: `sprintgen`
-- Region: `eastus`
-
-The live app is currently deployed from `.azure/containerapp-runtime.yml`. It runs the official Playwright container image and pulls the public GitHub `main` branch at startup. This keeps the app online even though ACR cloud builds are blocked on the current subscription.
-
-For a fuller production setup, use the included `Dockerfile` to build a custom image in CI, push it to Azure Container Registry, and point the Container App at that image.
-
 ## Presentation Mode
 
-Workbook-generated reports include a `Select a mode:` area with three Presentation Mode links:
+Generated sprint reviews include a `Select a mode:` area with three Presentation Mode links:
 
 - `Light`
-- `Dark`
+- `Blue`
 - `Prismatic`
 
 These open a full-screen browser presentation where each major sprint section fills the viewport like a slide. Use ArrowDown, PageDown, or Space to move forward. Use ArrowUp or PageUp to move backward. The Previous and Next buttons also work on desktop and mobile.
-
-Workbook Presentation Mode uses the uploaded workbook data for the current generated job. The links are temporary runtime links intended for same-day presentations:
-
-```text
-/present/<job-id>?vibe=light
-/present/<job-id>?vibe=dark
-/present/<job-id>?vibe=prismatic
-```
-
-If `vibe` is missing or invalid, SprintGen defaults to `prismatic`.
 
 ADO-generated sprint reviews use:
 
 ```text
 /ado-present/<job-id>?vibe=light
-/ado-present/<job-id>?vibe=dark
+/ado-present/<job-id>?vibe=blue
 /ado-present/<job-id>?vibe=prismatic
+```
+
+If `vibe` is missing or invalid, SprintGen defaults to `prismatic`.
+
+Saved reviews use durable local links:
+
+```text
+/reviews/<review-id>/present?vibe=light
+/reviews/<review-id>/present?vibe=blue
+/reviews/<review-id>/present?vibe=prismatic
 ```
 
 The ADO presentation uses the selected sprint metrics, animated burndown, animated 3-sprint velocity, approved summary, delivery updates, business value, selected completed ADO stories, selected next sprint ADO stories, and contributor names from ADO `AssignedTo` plus `Tested By` when available.
@@ -273,90 +257,23 @@ To clear generated CLI output and temporary web jobs:
 npm run clean
 ```
 
-## Workbook Format
-
-The workbook should include these sheets:
-
-- `Basics`
-- `Summary`
-- `Metrics`
-- `Platform`
-- `Delivered`
-- `UpNext`
-- `Demo`
-
-### Basics
-
-Columns: `Field`, `Value`.
-
-Required fields:
-
-- `TeamName`
-- `SprintName`
-- `DateRange`
-- `TargetRollout`
-- `FooterText`
-
-Generation fails if any required field is missing or blank.
-
-### Summary
-
-Columns: `Icon`, `Text`.
-
-Each row becomes a Sprint at a Glance item. If the sheet is empty, the section is hidden and a warning is shown.
-
-### Metrics
-
-Columns: `Label`, `Value`, `Tone`.
-
-Each row becomes a Sprint Health card. Supported tones are:
-
-- `green`
-- `blue`
-- `orange`
-- `red`
-- `gray`
-
-If this sheet is empty, Sprint Health is hidden and a warning is shown.
-
-### Platform
-
-Columns: `Icon`, `Title`, `Text`.
-
-Each row becomes a Platform Improvements card. This section is optional.
-
-### Delivered
-
-Columns: `SectionLabel`, `SectionTitle`, `Bullet`, `BusinessValue`.
-
-Rows with the same `SectionLabel` and `SectionTitle` are grouped into one Delivered Work section. Each `Bullet` becomes a bullet. The first non-empty `BusinessValue` for that group becomes the green Business Value callout.
-
-If this sheet is empty, Delivered Work is hidden and a warning is shown.
-
-### UpNext
-
-Columns: `Status`, `Title`, `Description`.
-
-Each row becomes a Looking Ahead item. Status values containing `QA`, `Active`, `Progress`, `Done`, or `Complete` receive matching badge styling; other values use planned styling.
-
-If this sheet is empty, Looking Ahead is hidden and a warning is shown.
-
-### Demo
-
-Column: `Text`.
-
-Rows appear in the Live Demo callout. This section is optional.
-
 ## Web Routes
 
-- `GET /` - PAT-first SprintGen authorization screen
-- `GET /ado-admin` - same PAT-first screen when disconnected; guided team/sprint selection when connected
+- `GET /` - Scrum Studio home page
+- `GET /lobby` - Lobby setup
+- `GET /lobby/run` - full-screen Lobby countdown
+- `GET /ado-admin` - Sprint Review Builder authorization and guided team/sprint selection
 - `POST /ado-admin/connect` - create the temporary in-memory PAT session
 - `POST /ado-admin/disconnect` - clear the temporary PAT session
 - `GET /ado-admin/scope?team=<teamName>` - return area paths and iterations for the selected team
 - `POST /ado-admin/preview` - legacy alias that now opens the Sprint Review Builder
 - `POST /ado-admin/review` - open the Sprint Review Builder for the selected team/area/sprint
 - `POST /ado-admin/generate-report` - generate ADO-backed HTML report, with PDF attempted as a legacy optional artifact
+- `GET /reviews` - saved sprint review library
+- `GET /reviews/:id` - saved review ready page
+- `GET /reviews/:id/edit` - edit a saved review
+- `POST /reviews/:id/update` - update and regenerate a saved review
+- `POST /reviews/:id/refresh` - refresh a saved review from ADO with a one-time PAT
 - `GET /ado-report/:id` - ADO report result page
 - `GET /ado-present/:id` - ADO Presentation Mode
 - `GET /ado-test` - ADO feasibility test
@@ -389,20 +306,3 @@ Open:
 ```text
 http://localhost:3000
 ```
-
-## Azure Container Apps Concept
-
-For MVP, no database, custom domain, or Azure Blob Storage is required.
-
-Conceptual deployment path:
-
-1. Build the Docker image.
-2. Push it to Azure Container Registry.
-3. Create an Azure Container Apps environment.
-4. Deploy the image as a container app.
-5. Set the container port to `3000`.
-6. Let Azure provide the default app URL.
-
-The app listens on `process.env.PORT || 3000`, so Azure can set the port through environment configuration.
-
-This repo also includes `.azure/containerapp-runtime.yml`, which documents the current live MVP deployment configuration.

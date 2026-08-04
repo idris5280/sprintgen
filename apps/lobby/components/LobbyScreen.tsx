@@ -2,12 +2,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountdownTimer, type TimerPhase } from "./CountdownTimer";
 import { TeamWeatherGrid } from "./TeamWeatherGrid";
-import { YouTubeMusicPlayer } from "./YouTubeMusicPlayer";
 import { TriviaCard } from "./TriviaCard";
 import { EVENT_DEFAULTS } from "@/lib/eventDefaults";
 import type { LobbyConfig } from "@/types";
-import { Maximize2, ArrowLeft, Music2, ArrowUpRight, Play } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, ArrowLeft, ArrowUpRight, Play } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 interface Props {
   config: LobbyConfig;
@@ -27,8 +26,6 @@ export function LobbyScreen({ config }: Props) {
     else el.requestFullscreen?.();
   };
 
-  const ms = config.musicSource;
-  const hasYouTube = ms.type === "youtube" && !!ms.youtubeVideoId;
   const prompt = config.facilitationPrompt?.trim();
   const focusMode = phase === "arrivalBuffer";
   const handoffMode = phase === "handoff";
@@ -49,16 +46,6 @@ export function LobbyScreen({ config }: Props) {
     [config.teamLocations, isKnowledgeShare],
   );
   const hasWeatherLocations = weatherLocations.length > 0;
-
-  // Fade out YouTube music when entering handoff, then unmount iframe.
-  const [musicUnmounted, setMusicUnmounted] = useState(handoffMode);
-  useEffect(() => {
-    if (handoffMode) {
-      const t = setTimeout(() => setMusicUnmounted(true), 1400);
-      return () => clearTimeout(t);
-    }
-    setMusicUnmounted(false);
-  }, [handoffMode]);
 
   return (
     <div
@@ -273,49 +260,10 @@ export function LobbyScreen({ config }: Props) {
         className="lobby-dashboard relative z-10 flex flex-wrap items-end"
         style={{
           gap: "clamp(12px, 1.5vw, 24px)",
-          justifyContent: hasWeatherLocations ? "space-between" : "flex-end",
+          justifyContent: "flex-start",
         }}
       >
         {hasWeatherLocations && <TeamWeatherGrid locations={weatherLocations} />}
-        {hasYouTube && ms.type === "youtube" ? (
-          <div
-            className="transition-opacity duration-[1200ms] ease-out"
-            style={{
-              opacity: handoffMode ? 0 : 1,
-              pointerEvents: handoffMode ? "none" : "auto",
-              marginLeft: hasWeatherLocations ? "auto" : undefined,
-            }}
-            aria-hidden={handoffMode}
-          >
-            {!musicUnmounted ? (
-              <YouTubeMusicPlayer
-                youtubeVideoId={ms.youtubeVideoId}
-                songTitle={ms.songTitle}
-                artist={ms.artist}
-                youtubeUrl={ms.youtubeUrl}
-              />
-            ) : null}
-          </div>
-        ) : (
-          <div
-            className="flex flex-col items-start gap-2 rounded-xl border border-white/10 bg-card/60 p-4 backdrop-blur"
-            style={{
-              width: "clamp(280px, 28vw, 440px)",
-              maxWidth: "100%",
-              marginLeft: hasWeatherLocations ? "auto" : undefined,
-            }}
-          >
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Music2 className="h-4 w-4" />
-              <span className="text-[10px] font-medium uppercase tracking-[0.25em]">
-                Music
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              No music selected. Add a YouTube link in Setup to play a track here.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

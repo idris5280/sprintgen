@@ -15,23 +15,6 @@ export interface TeamLocation {
   isHQ: boolean;
 }
 
-export type MusicMood =
-  | "light-upbeat"
-  | "focus-creative"
-  | "none"
-  | "ambient"
-  | "low-distraction-focus";
-
-export interface MusicTrack {
-  id: string;
-  title: string;
-  artist: string;
-  ceremonyType: ScrumEventType | "any";
-  mood: MusicMood;
-  src: string;
-  isAvailable: boolean;
-}
-
 export type LobbyTheme =
   | "standup-light"
   | "planning-energy"
@@ -39,18 +22,7 @@ export type LobbyTheme =
   | "retro-calm"
   | "focus-mode";
 
-export type MusicSource =
-  | { type: "none" }
-  | {
-      type: "youtube";
-      youtubeUrl: string;
-      youtubeVideoId: string;
-      songTitle: string;
-      artist: string;
-      videoTitle?: string;
-      channelName?: string;
-      thumbnailUrl?: string;
-    };
+export type MusicSource = { type: "none" };
 
 export interface LobbyConfig {
   meetingType: MeetingType;

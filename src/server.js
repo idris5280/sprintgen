@@ -552,7 +552,7 @@ function renderHomePage() {
             <div class="studio-tool-copy">
               <span class="studio-tool-label">Team waiting room</span>
               <h2 id="studio-lobby-title">Lobby</h2>
-              <p id="studio-lobby-description">Join or host the screen-shared waiting room with countdown, prompts, weather, and music for any scrum ceremony.</p>
+              <p id="studio-lobby-description">Join or host the screen-shared waiting room with countdown, prompts, weather, and trivia for any scrum ceremony.</p>
             </div>
             <span class="studio-tool-button">Open Lobby</span>
           </a>

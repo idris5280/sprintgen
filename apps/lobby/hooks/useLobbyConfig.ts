@@ -83,6 +83,7 @@ function hydrateConfig(parsed: Partial<LobbyConfig>, isLegacy: boolean): LobbyCo
   const next: LobbyConfig = {
     ...DEFAULT_CONFIG,
     ...parsed,
+    musicSource: { type: "none" },
     teamLocations: normalizeLocations(parsed.teamLocations, isLegacy),
   };
 
