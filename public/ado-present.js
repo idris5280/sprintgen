@@ -3,11 +3,36 @@
   const progress = document.querySelector(".present-progress span");
   const nextButton = document.querySelector("[data-next]");
   const prevButton = document.querySelector("[data-prev]");
+  const fullscreenButton = document.querySelector("[data-fullscreen]");
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let activeSlideIndex = -1;
 
   if (slides.length === 0) {
     return;
+  }
+
+  function updateFullscreenButton() {
+    if (!fullscreenButton) return;
+    const active = Boolean(document.fullscreenElement);
+    fullscreenButton.setAttribute("aria-label", active ? "Exit full screen" : "Enter full screen");
+    fullscreenButton.setAttribute("title", active ? "Exit full screen" : "Enter full screen");
+    fullscreenButton.setAttribute("aria-pressed", String(active));
+    const iconPath = fullscreenButton.querySelector("[data-fullscreen-icon]");
+    if (iconPath) {
+      iconPath.setAttribute("d", active ? iconPath.dataset.minimizePath : iconPath.dataset.maximizePath);
+    }
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen?.();
+      } else {
+        await document.documentElement.requestFullscreen?.();
+      }
+    } catch (error) {
+      console.warn("Fullscreen is unavailable in this browser.", error);
+    }
   }
 
   slides.forEach((slide, index) => {
@@ -325,6 +350,12 @@
   }
 
   document.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() === "f") {
+      event.preventDefault();
+      toggleFullscreen();
+      return;
+    }
+
     if (["ArrowDown", "PageDown", " "].includes(event.key)) {
       event.preventDefault();
       goNext();
@@ -342,6 +373,12 @@
 
   if (prevButton) {
     prevButton.addEventListener("click", goPrevious);
+  }
+
+  if (fullscreenButton) {
+    fullscreenButton.addEventListener("click", toggleFullscreen);
+    document.addEventListener("fullscreenchange", updateFullscreenButton);
+    updateFullscreenButton();
   }
 
   setupBurndownAnimations();

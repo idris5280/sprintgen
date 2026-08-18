@@ -1,0 +1,29 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Existing resources in rg-scrumstudio are discovered by these names.
+resource_group_name                 = "rg-scrumstudio"
+container_registry_name             = "acrscrumstudio"
+container_app_environment_name      = "cae-scrumstudio"
+container_app_name                  = "ca-scrumstudio"
+managed_identity_name               = "umi-scrumstudio"
+storage_account_name                = "scrumstudioblob"
+storage_container                   = "scrum-studio"
+
+# Use the immutable digest returned after the ACR cloud build.
+container_image = "acrscrumstudio.azurecr.io/scrum-studio@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+ado_org     = "company-organization"
+ado_project = "Digital Transformation"
+
+# IDs are not secrets. The credential value stays in Key Vault.
+entra_client_id       = "00000000-0000-0000-0000-000000000000"
+entra_tenant_id       = "00000000-0000-0000-0000-000000000000"
+entra_group_object_id = "00000000-0000-0000-0000-000000000000"
+key_vault_name        = "kv-scrumstudio"
+easy_auth_client_secret_key_vault_uri = "https://kv-scrumstudio.vault.azure.net/secrets/easy-auth-client-secret"
+
+# Leave false when deploying with Contributor. An RBAC administrator grants these roles separately.
+manage_role_assignments = false
+
+min_replicas = 1
+max_replicas = 3

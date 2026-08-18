@@ -1,4 +1,13 @@
 :root {
+  --deck-color: #0076c0;
+  --deck-on-color: #f7f9fc;
+  --deck-surface-mix: #000000;
+  --deck-muted: color-mix(in srgb, var(--deck-on-color) 78%, var(--deck-color));
+  --deck-surface: color-mix(in srgb, var(--deck-color) 84%, var(--deck-surface-mix));
+  --deck-surface-strong: color-mix(in srgb, var(--deck-color) 70%, var(--deck-surface-mix));
+  --deck-border: color-mix(in srgb, var(--deck-on-color) 32%, transparent);
+  --deck-signal: color-mix(in srgb, var(--deck-on-color) 88%, var(--deck-color));
+  --deck-shadow: 0 28px 80px rgba(0, 0, 0, .24);
   --ink: #10212c;
   --muted: #61727e;
   --panel: rgba(255, 255, 255, .88);
@@ -26,7 +35,7 @@ body {
     radial-gradient(circle at 86% 14%, rgba(14, 191, 202, .26), transparent 26%),
     linear-gradient(135deg, #f8fcff 0%, #eef9fb 52%, #fff8df 100%);
   color: var(--ink);
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif;
   margin: 0;
   overflow-x: hidden;
 }
@@ -59,6 +68,98 @@ body.vibe-prismatic {
     radial-gradient(circle at 84% 16%, rgba(0, 240, 255, .28), transparent 27%),
     radial-gradient(circle at 76% 82%, rgba(123, 92, 255, .22), transparent 26%),
     linear-gradient(135deg, #f8fbff 0%, #eff9ff 44%, #fff8ff 100%);
+}
+
+body.vibe-color {
+  --deck-muted: color-mix(in srgb, var(--deck-on-color) 78%, var(--deck-color));
+  --deck-surface: color-mix(in srgb, var(--deck-color) 84%, var(--deck-surface-mix));
+  --deck-surface-strong: color-mix(in srgb, var(--deck-color) 70%, var(--deck-surface-mix));
+  --deck-border: color-mix(in srgb, var(--deck-on-color) 32%, transparent);
+  --deck-signal: color-mix(in srgb, var(--deck-on-color) 88%, var(--deck-color));
+  --ink: var(--deck-on-color);
+  --muted: var(--deck-muted);
+  --panel: var(--deck-surface);
+  --line: var(--deck-border);
+  --blue: var(--deck-signal);
+  --aqua: color-mix(in srgb, var(--deck-signal) 78%, var(--deck-color));
+  --pink: var(--deck-signal);
+  --yellow: var(--deck-signal);
+  --green: var(--deck-signal);
+  --shadow: var(--deck-shadow);
+  background: var(--deck-color);
+  color: var(--deck-on-color);
+}
+
+body.vibe-color::before,
+body.vibe-color::after {
+  display: none;
+}
+
+body.vibe-color .present-card {
+  background:
+    linear-gradient(var(--deck-surface), var(--deck-surface)) padding-box,
+    linear-gradient(120deg, var(--deck-border), color-mix(in srgb, var(--deck-signal) 64%, transparent), var(--deck-border)) border-box;
+}
+
+body.vibe-color :where(
+  dl div,
+  .metric-card,
+  .chart-card,
+  .velocity-panel,
+  .present-work-list article,
+  .present-copy-block,
+  .present-story-block,
+  .present-contributors,
+  .linked-story-list article,
+  .present-screenshot-media,
+  .present-readiness-card,
+  .present-readiness-message,
+  .questions-card,
+  .empty-state
+) {
+  background: var(--deck-surface-strong);
+  border-color: var(--deck-border);
+  color: var(--deck-on-color);
+}
+
+body.vibe-color :where(.velocity-track, .story-summary-pill, .present-contributor-list span, .demo-presenter-chips span, .delivery-story-pill) {
+  background: var(--deck-surface-strong);
+  border-color: var(--deck-border);
+  color: var(--deck-on-color);
+}
+
+body.vibe-color .present-business-value {
+  background: var(--deck-surface-strong);
+  border-color: color-mix(in srgb, var(--deck-signal) 54%, transparent);
+  box-shadow: var(--deck-shadow);
+  color: var(--deck-on-color);
+}
+
+body.vibe-color .present-business-value::before,
+body.vibe-color .present-business-value::after {
+  opacity: .22;
+}
+
+body.vibe-color :where(.present-business-value span, .present-business-value p, .present-business-value li, .present-readiness-card h3, .present-readiness-card p, .story-summary-pill strong) {
+  color: var(--deck-on-color);
+}
+
+body.vibe-color .velocity-points {
+  background: var(--deck-signal);
+  border-color: var(--deck-border);
+  color: var(--deck-color);
+}
+
+body.vibe-color .present-logo-panel,
+body.vibe-color .present-team-logo {
+  background: var(--deck-surface-strong);
+  border-color: var(--deck-border);
+}
+
+body.vibe-color .presentation-brand-rail {
+  color: var(--deck-on-color);
+  filter: none;
+  opacity: 1;
 }
 
 body.vibe-dark dl div,
@@ -272,6 +373,70 @@ body.vibe-prismatic .presentation-brand-rail {
 .present-card.wide {
   max-width: 1180px;
   width: min(100%, 1180px);
+}
+
+.present-opening-card {
+  max-width: 1180px;
+  width: min(100%, 1180px);
+}
+
+.present-team-logo {
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 52px rgba(0, 20, 58, .24);
+  display: block;
+  height: clamp(260px, 42vh, 400px);
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  padding: clamp(14px, 2vw, 24px);
+  width: 100%;
+  animation: teamLogoFloat 5.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.present-opening-layout {
+  align-items: stretch;
+  display: grid;
+  gap: clamp(24px, 4vw, 52px);
+  grid-template-columns: minmax(0, 60fr) minmax(320px, 40fr);
+}
+
+.present-logo-panel {
+  align-items: center;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  justify-content: center;
+  min-height: clamp(330px, 48vh, 460px);
+  padding: clamp(18px, 2.5vw, 32px);
+}
+
+.present-logo-panel .present-team-logo {
+  margin-top: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.present-opening-copy {
+  align-content: center;
+  display: grid;
+  min-width: 0;
+}
+
+.present-opening-copy dl {
+  margin-top: 30px;
+}
+
+@keyframes teamLogoFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
 }
 
 .present-kicker,
@@ -1619,6 +1784,45 @@ body.vibe-dark .questions-card {
   z-index: 4;
 }
 
+.present-fullscreen {
+  align-items: center;
+  background: rgba(255, 255, 255, .88);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+  position: fixed;
+  right: 18px;
+  top: 18px;
+  width: 40px;
+  z-index: 6;
+}
+
+.present-fullscreen svg {
+  fill: none;
+  height: 19px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  width: 19px;
+}
+
+.present-fullscreen:hover {
+  border-color: var(--blue);
+  box-shadow: 0 10px 28px rgba(16, 33, 44, .18);
+}
+
+.present-fullscreen:focus-visible {
+  outline: 3px solid var(--aqua);
+  outline-offset: 3px;
+}
+
 .present-controls button {
   align-items: center;
   background: rgba(255, 255, 255, .88);
@@ -1634,10 +1838,40 @@ body.vibe-dark .questions-card {
   justify-content: center;
   line-height: 1;
   padding: 0;
-  width: 42px;
+  width: 40px;
+}
+
+body.vibe-color .present-controls button,
+body.vibe-color .present-fullscreen {
+  background: var(--deck-surface-strong);
+  border-color: var(--deck-border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .16);
+  color: var(--deck-on-color);
+}
+
+body.vibe-color .present-controls button:hover,
+body.vibe-color .present-fullscreen:hover {
+  background: var(--deck-signal);
+  border-color: var(--deck-signal);
+  color: var(--deck-color);
+}
+
+body.vibe-color .present-progress {
+  background: color-mix(in srgb, var(--deck-on-color) 22%, transparent);
+}
+
+body.vibe-color .present-progress span {
+  background: var(--deck-signal);
 }
 
 body.vibe-dark .present-controls button {
+  background: rgba(224, 243, 255, .12);
+  border-color: rgba(154, 205, 255, .4);
+  box-shadow: 0 12px 30px rgba(0, 22, 58, .34);
+  color: #eaf6ff;
+}
+
+body.vibe-dark .present-fullscreen {
   background: rgba(224, 243, 255, .12);
   border-color: rgba(154, 205, 255, .4);
   box-shadow: 0 12px 30px rgba(0, 22, 58, .34);
@@ -1653,6 +1887,13 @@ body.vibe-dark .present-progress span {
 }
 
 body.vibe-prismatic .present-controls button {
+  background: rgba(16, 17, 43, .74);
+  border-color: rgba(0, 240, 255, .52);
+  box-shadow: 0 0 22px rgba(255, 61, 242, .18);
+  color: #ffffff;
+}
+
+body.vibe-prismatic .present-fullscreen {
   background: rgba(16, 17, 43, .74);
   border-color: rgba(0, 240, 255, .52);
   box-shadow: 0 0 22px rgba(255, 61, 242, .18);
@@ -1820,6 +2061,11 @@ body.vibe-prismatic .present-controls button {
     animation: none;
     transform: none;
   }
+
+  .present-team-logo {
+    animation: none;
+    transform: none;
+  }
 }
 
 @media (max-width: 820px) {
@@ -1840,6 +2086,7 @@ body.vibe-prismatic .present-controls button {
   }
 
   dl,
+  .present-opening-layout,
   .metric-card-grid,
   .velocity-panel,
   .present-work-list,
@@ -1849,6 +2096,14 @@ body.vibe-prismatic .present-controls button {
   .present-risk-grid,
   .present-readiness-grid {
     grid-template-columns: 1fr;
+  }
+
+  .present-logo-panel {
+    min-height: 260px;
+  }
+
+  .present-team-logo {
+    height: min(320px, 42vh);
   }
 
   .velocity-row {
@@ -1866,5 +2121,13 @@ body.vibe-prismatic .present-controls button {
 
   .present-controls button {
     flex: 0 0 42px;
+  }
+}
+
+@media print {
+  .present-controls,
+  .present-fullscreen,
+  .present-progress {
+    display: none !important;
   }
 }

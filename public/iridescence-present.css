@@ -1,0 +1,235 @@
+html.iridescence-document {
+  color-scheme: light;
+}
+
+body.vibe-iridescence {
+  --ink: #06242c;
+  --muted: #285661;
+  --panel: transparent;
+  --line: rgba(4, 59, 72, .26);
+  --blue: #075f74;
+  --aqua: #08788e;
+  --pink: #b7193a;
+  --yellow: #9b5c00;
+  --green: #147a48;
+  --shadow: 0 24px 64px rgba(0, 64, 78, .18);
+  background: #06b6d4;
+  color: var(--ink);
+}
+
+body.vibe-iridescence::before,
+body.vibe-iridescence::after {
+  display: none;
+}
+
+.iridescence-background {
+  background: #06b6d4;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: fixed;
+  transition: opacity 650ms ease;
+  z-index: 0;
+}
+
+.iridescence-background.is-ready {
+  opacity: 1;
+}
+
+.iridescence-background canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+body.iridescence-fallback .iridescence-background {
+  background:
+    radial-gradient(circle at 18% 24%, rgba(185, 250, 255, .92), transparent 34%),
+    radial-gradient(circle at 78% 72%, rgba(0, 134, 158, .78), transparent 42%),
+    linear-gradient(135deg, #a8f5fb, #23c8df 48%, #06a8c3);
+  opacity: 1;
+}
+
+body.vibe-iridescence .present-card {
+  background: rgba(255, 255, 255, .36);
+  border-color: rgba(4, 59, 72, .28);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+
+body.vibe-iridescence .present-card::before {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .94), #d5fbff, transparent);
+}
+
+body.vibe-iridescence :where(h1, h2, h3, p, li, strong, dd) {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+body.vibe-iridescence :where(.present-subtitle, .present-empty, .empty-state, small) {
+  color: var(--muted);
+}
+
+body.vibe-iridescence :where(.present-kicker, .metric-card span, .chart-heading span, .velocity-average span, .velocity-row span, dt, .present-contributors > span, .present-business-value > span, .present-story-block > span, .present-readiness-card > span, .linked-story-list span) {
+  color: #075f74;
+  opacity: 1;
+}
+
+body.vibe-iridescence :where(dl div, .metric-card, .chart-card, .velocity-panel, .present-work-list article, .present-copy-block, .present-story-block, .present-contributors, .linked-story-list article, .present-screenshot-media, .present-readiness-card) {
+  background: rgba(255, 255, 255, .5);
+  border-color: rgba(4, 59, 72, .25);
+  color: var(--ink);
+}
+
+body.vibe-iridescence .present-business-value {
+  background: rgba(255, 255, 255, .7);
+  border-color: rgba(4, 95, 116, .34);
+  box-shadow: 0 18px 42px rgba(0, 78, 92, .18);
+  color: var(--ink);
+}
+
+body.vibe-iridescence .present-business-value::before,
+body.vibe-iridescence .present-business-value::after {
+  opacity: .3;
+}
+
+body.vibe-iridescence .velocity-average,
+body.vibe-iridescence .velocity-track,
+body.vibe-iridescence .metric-card {
+  background: rgba(255, 255, 255, .54);
+  border-color: rgba(4, 59, 72, .25);
+  color: var(--ink);
+}
+
+body.vibe-iridescence .velocity-average :where(span, strong, small),
+body.vibe-iridescence .metric-card strong {
+  color: var(--ink);
+}
+
+body.vibe-iridescence .velocity-fill {
+  background: linear-gradient(90deg, #075f74, #06b6d4, #7ee9f3);
+}
+
+body.vibe-iridescence .velocity-points {
+  background: rgba(255, 255, 255, .88);
+  border-color: rgba(4, 59, 72, .3);
+  color: #06242c;
+}
+
+body.vibe-iridescence .chart-grid line {
+  stroke: rgba(4, 59, 72, .18);
+}
+
+body.vibe-iridescence .chart-axis,
+body.vibe-iridescence .chart-caption span {
+  color: var(--muted);
+  fill: var(--muted);
+}
+
+body.vibe-iridescence .burn-line {
+  stroke: #075f74;
+}
+
+body.vibe-iridescence .burn-dot {
+  fill: #ffffff;
+  stroke: #075f74;
+}
+
+body.vibe-iridescence .present-logo-panel,
+body.vibe-iridescence .present-team-logo {
+  background: rgba(255, 255, 255, .58);
+  border-color: rgba(4, 59, 72, .28);
+}
+
+body.vibe-iridescence .presentation-brand-rail {
+  color: #064557;
+  filter: none;
+  opacity: 1;
+}
+
+body.vibe-iridescence .present-special-heading > span,
+body.vibe-iridescence :where(.story-summary-pill, .demo-presenter-chips span, .delivery-story-pill) {
+  background: rgba(255, 255, 255, .58);
+  border-color: rgba(4, 59, 72, .26);
+  color: var(--ink);
+}
+
+body.vibe-iridescence .present-risk-heat {
+  color: var(--ink);
+}
+
+body.vibe-iridescence .risk-present-card.severity-low .present-risk-heat {
+  background: rgba(214, 246, 226, .84);
+  border-color: #198754;
+  color: #0b3a23;
+}
+
+body.vibe-iridescence .risk-present-card.severity-medium .present-risk-heat {
+  background: rgba(255, 236, 196, .88);
+  border-color: #c26b00;
+  color: #4f2b00;
+}
+
+body.vibe-iridescence .risk-present-card.severity-high .present-risk-heat,
+body.vibe-iridescence .risk-present-card.severity-critical .present-risk-heat {
+  background: rgba(255, 213, 219, .9);
+  border-color: #c5223f;
+  box-shadow: 0 0 28px rgba(197, 34, 63, .16);
+  color: #5e0e20;
+}
+
+body.vibe-iridescence .risk-present-card.severity-low .present-risk-heat :where(span, strong) {
+  color: #0b3a23;
+}
+
+body.vibe-iridescence .risk-present-card.severity-medium .present-risk-heat :where(span, strong) {
+  color: #4f2b00;
+}
+
+body.vibe-iridescence .risk-present-card.severity-high .present-risk-heat :where(span, strong),
+body.vibe-iridescence .risk-present-card.severity-critical .present-risk-heat :where(span, strong) {
+  color: #5e0e20;
+}
+
+body.vibe-iridescence .present-readiness-message,
+body.vibe-iridescence .questions-card {
+  background: rgba(255, 255, 255, .54);
+  border-color: rgba(4, 59, 72, .26);
+}
+
+body.vibe-iridescence .reveal .progress {
+  background: rgba(4, 59, 72, .2);
+  color: #075f74;
+}
+
+body.vibe-iridescence .spotlight-controls button,
+body.vibe-iridescence .present-fullscreen {
+  background: rgba(255, 255, 255, .82);
+  border-color: rgba(4, 59, 72, .32);
+  box-shadow: 0 12px 28px rgba(0, 72, 86, .18);
+  color: #06242c;
+}
+
+body.vibe-iridescence .spotlight-controls button:hover,
+body.vibe-iridescence .present-fullscreen:hover {
+  background: #ffffff;
+  border-color: #075f74;
+  color: #075f74;
+}
+
+body.vibe-iridescence .spotlight-controls button:focus-visible,
+body.vibe-iridescence .present-fullscreen:focus-visible {
+  outline-color: #064557;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iridescence-background {
+    transition: none;
+  }
+}
+
+@media print {
+  .iridescence-background {
+    display: none !important;
+  }
+}

@@ -36,23 +36,19 @@ if errorlevel 1 (
   echo Server dependencies are ready.
 )
 
-if exist "apps\lobby\package.json" (
-  call :NeedsInstall "apps\lobby" "apps\lobby\package-lock.json"
+if exist "apps\studio\package.json" (
+  call :NeedsInstall "apps\studio" "apps\studio\package-lock.json"
   if errorlevel 1 (
-    echo Installing Lobby dependencies...
-    call npm.cmd --prefix apps/lobby install
+    echo Installing Scrum Studio app dependencies...
+    call npm.cmd --prefix apps/studio install
     if errorlevel 1 goto install_failed
   ) else (
-    echo Lobby dependencies are ready.
+    echo Scrum Studio app dependencies are ready.
   )
 
-  if not exist "apps\lobby\dist\index.html" (
-    echo Building Lobby assets...
-    call npm.cmd run build:lobby
-    if errorlevel 1 goto build_failed
-  ) else (
-    echo Lobby assets are ready.
-  )
+  echo Building Scrum Studio assets...
+  call npm.cmd run build:studio
+  if errorlevel 1 goto build_failed
 )
 
 call :IsRunning
@@ -80,7 +76,7 @@ exit /b 0
 set "CHECK_DIR=%~1"
 set "LOCK_FILE=%~2"
 if not exist "%CHECK_DIR%\node_modules" exit /b 1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "if (!(Test-Path '%LOCK_FILE%')) { exit 0 }; if ((Get-Item '%LOCK_FILE%').LastWriteTime -gt (Get-Item '%CHECK_DIR%\node_modules').LastWriteTime) { exit 1 } else { exit 0 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$modules=(Get-Item '%CHECK_DIR%\node_modules').LastWriteTime; if ((Test-Path '%CHECK_DIR%\package.json') -and (Get-Item '%CHECK_DIR%\package.json').LastWriteTime -gt $modules) { exit 1 }; if ((Test-Path '%LOCK_FILE%') -and (Get-Item '%LOCK_FILE%').LastWriteTime -gt $modules) { exit 1 }; exit 0"
 exit /b %errorlevel%
 
 :IsRunning
@@ -96,7 +92,7 @@ exit /b 1
 
 :build_failed
 echo.
-echo Lobby build failed. Check the messages above, then run this file again.
+echo Scrum Studio build failed. Check the messages above, then run this file again.
 echo.
 pause
 exit /b 1

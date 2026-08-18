@@ -1,13 +1,15 @@
 {
   "name": "sprintgen",
   "version": "1.0.0",
-  "description": "Generate polished sprint demo HTML and PDF reports from an Excel workbook.",
+  "description": "Scrum Studio for team lobbies and Azure DevOps-backed sprint reviews.",
   "main": "src/server.js",
   "scripts": {
     "generate": "node src/generate.js",
     "clean": "node -e \"const fs = require('fs'); fs.rmSync('output', { recursive: true, force: true }); fs.rmSync('runtime', { recursive: true, force: true }); fs.mkdirSync('output', { recursive: true });\"",
-    "build:lobby": "npm --prefix apps/lobby run build",
-    "dev:lobby": "npm --prefix apps/lobby run dev",
+    "build:studio": "npm --prefix apps/studio run build",
+    "dev:studio": "npm --prefix apps/studio run dev",
+    "build": "npm run build:studio",
+    "test": "node --test --test-isolation=none --test-concurrency=1 test/*.test.js",
     "dev": "node src/server.js",
     "start": "node src/server.js"
   },
@@ -21,10 +23,14 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@azure/identity": "^4.13.0",
+    "@azure/monitor-opentelemetry": "1.18.2",
+    "@azure/storage-blob": "^12.29.1",
     "express": "^4.19.2",
     "handlebars": "^4.7.8",
     "multer": "^2.1.1",
-    "playwright": "^1.44.0",
+    "playwright": "1.60.0",
+    "reveal.js": "6.0.0",
     "xlsx": "^0.18.5"
   }
 }

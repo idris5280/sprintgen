@@ -1,5 +1,6 @@
 const DEFAULT_ORG = "esiappdev";
 const DEFAULT_PROJECT = "Digital Transformation";
+const { fetchWithTimeout } = require("./runtimeSafety");
 
 class AdoError extends Error {
   constructor(message, { status = 500, code = "ADO_ERROR", detail = "" } = {}) {
@@ -11,6 +12,22 @@ class AdoError extends Error {
   }
 }
 
+async function fetchAdo(url, options) {
+  try {
+    return await fetchWithTimeout(url, options, 20000);
+  } catch (error) {
+    if (error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new AdoError("Azure DevOps took too long to respond. Try again in a moment.", {
+        status: 504,
+        code: "ADO_TIMEOUT"
+      });
+    }
+    throw error;
+  }
+}
+
+let adoAuthProvider = null;
+
 function getAdoConfig() {
   return {
     org: process.env.ADO_ORG || DEFAULT_ORG,
@@ -18,22 +35,54 @@ function getAdoConfig() {
   };
 }
 
-function assertPat(pat) {
-  if (!pat || !String(pat).trim()) {
-    throw new AdoError("Enter an Azure DevOps PAT to run the feasibility test.", {
-      status: 400,
-      code: "MISSING_PAT"
-    });
+function setAdoAuthProvider(provider) {
+  if (provider !== null && typeof provider !== "function") {
+    throw new TypeError("Azure DevOps auth provider must be a function.");
   }
+
+  adoAuthProvider = provider;
 }
 
-function createAuthHeaders(pat, accept = "application/json") {
-  assertPat(pat);
+function normalizeAuthInput(authInput) {
+  if (authInput && typeof authInput === "object") {
+    return authInput;
+  }
 
-  return {
-    Authorization: `Basic ${Buffer.from(`:${String(pat).trim()}`, "utf8").toString("base64")}`,
-    Accept: accept
-  };
+  return {};
+}
+
+async function resolveAuthInput(authInput, forceRefresh = false) {
+  const direct = normalizeAuthInput(authInput);
+
+  if (direct.bearerToken) {
+    return direct;
+  }
+
+  if (!adoAuthProvider) {
+    throw new AdoError("Azure DevOps authentication is not configured for Scrum Studio.", {
+      status: 503,
+      code: "ADO_AUTH_NOT_CONFIGURED"
+    });
+  }
+
+  return normalizeAuthInput(await adoAuthProvider({ forceRefresh }));
+}
+
+async function createAuthHeaders(authInput, accept = "application/json", forceRefresh = false) {
+  const auth = await resolveAuthInput(authInput, forceRefresh);
+  const bearerToken = String(auth.bearerToken || "").trim();
+
+  if (bearerToken) {
+    return {
+      Authorization: `Bearer ${bearerToken}`,
+      Accept: accept
+    };
+  }
+
+  throw new AdoError("Azure could not issue an Azure DevOps bearer token.", {
+    status: 503,
+    code: "ADO_TOKEN_UNAVAILABLE"
+  });
 }
 
 function encodeSegment(value) {
@@ -99,11 +148,11 @@ function extractErrorMessage(body) {
 
 function friendlyStatusMessage(status, fallback) {
   if (status === 401) {
-    return "Azure DevOps rejected the PAT. Confirm the token is active, copied correctly, and scoped to the esiappdev organization.";
+    return "Azure DevOps rejected the managed-identity token. Confirm the Azure DevOps token scope and managed identity configuration.";
   }
 
   if (status === 403) {
-    return "Azure DevOps accepted the request but blocked access. The PAT user likely needs read access to work items, teams, or Analytics.";
+    return "Azure DevOps recognized Scrum Studio but blocked access. An administrator must grant the managed identity read access to this project, team, area path, or Analytics resource.";
   }
 
   if (status === 404) {
@@ -113,18 +162,28 @@ function friendlyStatusMessage(status, fallback) {
   return fallback || "Azure DevOps returned an unexpected response.";
 }
 
-async function requestJson(url, { pat, method = "GET", body } = {}) {
-  const headers = createAuthHeaders(pat);
+async function requestJson(url, { auth, method = "GET", body } = {}) {
+  const headers = await createAuthHeaders(auth);
 
   if (body) {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(url, {
+  let response = await fetchAdo(url, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined
   });
+
+  if (response.status === 401 && !auth) {
+    const retryHeaders = await createAuthHeaders(null, "application/json", true);
+    if (body) retryHeaders["Content-Type"] = "application/json";
+    response = await fetchAdo(url, {
+      method,
+      headers: retryHeaders,
+      body: body ? JSON.stringify(body) : undefined
+    });
+  }
 
   const parsedBody = await parseResponseBody(response);
 
@@ -139,10 +198,10 @@ async function requestJson(url, { pat, method = "GET", body } = {}) {
   return parsedBody;
 }
 
-async function listProjectTeams({ pat, org, project }) {
+async function listProjectTeams({ auth, org, project }) {
   const baseUrl = buildDevOpsOrgBaseUrl({ org });
   const url = `${baseUrl}/_apis/projects/${encodeSegment(project)}/teams?$top=500&api-version=7.1`;
-  const response = await requestJson(url, { pat });
+  const response = await requestJson(url, { auth });
   const teams = Array.isArray(response.value) ? response.value : [];
 
   return {
@@ -159,10 +218,16 @@ async function listProjectTeams({ pat, org, project }) {
   };
 }
 
-async function requestText(url, { pat } = {}) {
-  const response = await fetch(url, {
-    headers: createAuthHeaders(pat, "application/xml,text/xml,*/*")
+async function requestText(url, { auth } = {}) {
+  let response = await fetchAdo(url, {
+    headers: await createAuthHeaders(auth, "application/xml,text/xml,*/*")
   });
+
+  if (response.status === 401 && !auth) {
+    response = await fetchAdo(url, {
+      headers: await createAuthHeaders(null, "application/xml,text/xml,*/*", true)
+    });
+  }
 
   const body = await response.text();
 
@@ -180,7 +245,7 @@ async function requestText(url, { pat } = {}) {
   };
 }
 
-async function listTeamIterations({ pat, org, project, team }) {
+async function listTeamIterations({ auth, org, project, team }) {
   if (!team || !String(team).trim()) {
     throw new AdoError("Enter a team name before running the feasibility test.", {
       status: 400,
@@ -190,7 +255,7 @@ async function listTeamIterations({ pat, org, project, team }) {
 
   const baseUrl = buildDevOpsBaseUrl({ org, project });
   const url = `${baseUrl}/${encodeSegment(team)}/_apis/work/teamsettings/iterations?api-version=7.1`;
-  const response = await requestJson(url, { pat });
+  const response = await requestJson(url, { auth });
 
   return {
     count: Array.isArray(response.value) ? response.value.length : 0,
@@ -198,7 +263,7 @@ async function listTeamIterations({ pat, org, project, team }) {
   };
 }
 
-async function listTeamAreaPaths({ pat, org, project, team }) {
+async function listTeamAreaPaths({ auth, org, project, team }) {
   if (!team || !String(team).trim()) {
     throw new AdoError("Enter a team name before loading area paths.", {
       status: 400,
@@ -208,7 +273,7 @@ async function listTeamAreaPaths({ pat, org, project, team }) {
 
   const baseUrl = buildDevOpsBaseUrl({ org, project });
   const url = `${baseUrl}/${encodeSegment(team)}/_apis/work/teamsettings/teamfieldvalues?api-version=7.1`;
-  const response = await requestJson(url, { pat });
+  const response = await requestJson(url, { auth });
   const values = Array.isArray(response.values) ? response.values : [];
   const areas = values
     .map((area) => ({
@@ -280,9 +345,9 @@ function resolveIterationInput(sprintInput, iterations) {
   };
 }
 
-async function fetchAnalyticsMetadata({ pat, org, project }) {
+async function fetchAnalyticsMetadata({ auth, org, project }) {
   const url = `${buildAnalyticsBaseUrl({ org, project })}/$metadata`;
-  const response = await requestText(url, { pat });
+  const response = await requestText(url, { auth });
 
   return {
     status: response.status,
@@ -308,17 +373,17 @@ function normalizeFieldName(value) {
   return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
-async function listWorkItemFields({ pat, org, project }) {
+async function listWorkItemFields({ auth, org, project }) {
   const baseUrl = buildDevOpsBaseUrl({ org, project });
   const url = `${baseUrl}/_apis/wit/fields?api-version=7.1`;
-  const response = await requestJson(url, { pat });
+  const response = await requestJson(url, { auth });
 
   return Array.isArray(response.value) ? response.value : [];
 }
 
-async function discoverTestedByFieldReferences({ pat, org, project }) {
+async function discoverTestedByFieldReferences({ auth, org, project }) {
   const configured = uniqueValues([process.env.ADO_TESTED_BY_FIELD]);
-  const fields = await listWorkItemFields({ pat, org, project });
+  const fields = await listWorkItemFields({ auth, org, project });
   const discovered = fields
     .filter((field) => {
       const displayName = normalizeFieldName(field.name);
@@ -331,7 +396,7 @@ async function discoverTestedByFieldReferences({ pat, org, project }) {
   return uniqueValues([...configured, ...discovered]);
 }
 
-async function queryStoryPointBurndown({ pat, org, project, team, iterationPath, areaPath = "" }) {
+async function queryStoryPointBurndown({ auth, org, project, team, iterationPath, areaPath = "" }) {
   const apply = [
     "filter(",
     "WorkItemType eq 'User Story'",
@@ -350,11 +415,11 @@ async function queryStoryPointBurndown({ pat, org, project, team, iterationPath,
   const url = new URL(`${buildAnalyticsBaseUrl({ org, project })}/WorkItemSnapshot`);
   url.searchParams.set("$apply", apply);
 
-  const response = await requestJson(url.toString(), { pat });
+  const response = await requestJson(url.toString(), { auth });
   return Array.isArray(response.value) ? response.value : [];
 }
 
-async function queryIterationSnapshotRows({ pat, org, project, team, iterationPath, areaPath = "" }) {
+async function queryIterationSnapshotRows({ auth, org, project, team, iterationPath, areaPath = "" }) {
   const applyWithStateCategory = [
     "filter(",
     "WorkItemType eq 'User Story'",
@@ -374,17 +439,17 @@ async function queryIterationSnapshotRows({ pat, org, project, team, iterationPa
   url.searchParams.set("$apply", applyWithStateCategory);
 
   try {
-    const response = await requestJson(url.toString(), { pat });
+    const response = await requestJson(url.toString(), { auth });
     return Array.isArray(response.value) ? response.value : [];
   } catch (error) {
-    const fallbackRows = await queryStoryPointBurndown({ pat, org, project, team, iterationPath, areaPath });
+    const fallbackRows = await queryStoryPointBurndown({ auth, org, project, team, iterationPath, areaPath });
     fallbackRows.fallbackReason = error.message;
     return fallbackRows;
   }
 }
 
 async function queryIterationWorkItemsFromAnalytics({
-  pat,
+  auth,
   org,
   project,
   team,
@@ -421,7 +486,7 @@ async function queryIterationWorkItemsFromAnalytics({
   url.searchParams.set("$orderby", "WorkItemType,WorkItemId");
   url.searchParams.set("$top", "1000");
 
-  const response = await requestJson(url.toString(), { pat });
+  const response = await requestJson(url.toString(), { auth });
 
   return {
     source: "Analytics WorkItems",
@@ -430,7 +495,7 @@ async function queryIterationWorkItemsFromAnalytics({
   };
 }
 
-async function queryCurrentSprintWorkItemsFromAnalytics({ pat, org, project, team, iterationPath, areaPath = "", includeAssignedTo = true }) {
+async function queryCurrentSprintWorkItemsFromAnalytics({ auth, org, project, team, iterationPath, areaPath = "", includeAssignedTo = true }) {
   const url = new URL(`${buildAnalyticsBaseUrl({ org, project })}/WorkItems`);
   const selectFields = ["WorkItemId", "Title", "State", "WorkItemType", "StoryPoints"];
 
@@ -446,7 +511,7 @@ async function queryCurrentSprintWorkItemsFromAnalytics({ pat, org, project, tea
   url.searchParams.set("$orderby", "WorkItemType,WorkItemId");
   url.searchParams.set("$top", "50");
 
-  const response = await requestJson(url.toString(), { pat });
+  const response = await requestJson(url.toString(), { auth });
 
   return {
     source: "Analytics WorkItems",
@@ -455,7 +520,7 @@ async function queryCurrentSprintWorkItemsFromAnalytics({ pat, org, project, tea
   };
 }
 
-async function queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath = "", extraFields = [] }) {
+async function queryCurrentSprintWorkItemsFromWiql({ auth, org, project, iterationPath, areaPath = "", extraFields = [] }) {
   const baseUrl = buildDevOpsBaseUrl({ org, project });
   const wiqlUrl = `${baseUrl}/_apis/wit/wiql?api-version=7.1`;
   const selectFields = ["[System.Id]", "[System.Title]", "[System.State]", "[System.WorkItemType]", "[System.AssignedTo]"];
@@ -479,7 +544,7 @@ async function queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iteratio
   ].filter(Boolean).join(" ");
 
   const wiql = await requestJson(wiqlUrl, {
-    pat,
+    auth,
     method: "POST",
     body: { query }
   });
@@ -499,7 +564,7 @@ async function queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iteratio
 
   for (const idChunk of chunkArray(ids, 200)) {
     const batch = await requestJson(batchUrl, {
-      pat,
+      auth,
       method: "POST",
       body: {
         ids: idChunk,
@@ -567,7 +632,7 @@ function appendResultWarning(result, warning) {
   result.warning = result.warning ? `${result.warning} ${warning}` : warning;
 }
 
-async function enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterationPath, areaPath = "", missingWarning = "" }) {
+async function enrichWorkItemsWithAssignedTo(result, { auth, org, project, iterationPath, areaPath = "", missingWarning = "" }) {
   const items = Array.isArray(result.items) ? result.items : [];
 
   if (items.length === 0) {
@@ -577,7 +642,7 @@ async function enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterat
   let testedByFieldRefs = [];
 
   try {
-    testedByFieldRefs = await discoverTestedByFieldReferences({ pat, org, project });
+    testedByFieldRefs = await discoverTestedByFieldReferences({ auth, org, project });
   } catch (error) {
     result.testedByFieldDiscoveryError = error.message;
   }
@@ -591,7 +656,7 @@ async function enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterat
 
   try {
     const wiqlResult = await queryCurrentSprintWorkItemsFromWiql({
-      pat,
+      auth,
       org,
       project,
       iterationPath,
@@ -652,14 +717,14 @@ async function enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterat
   return result;
 }
 
-async function queryCurrentSprintWorkItems({ pat, org, project, team, iterationPath, areaPath = "" }) {
+async function queryCurrentSprintWorkItems({ auth, org, project, team, iterationPath, areaPath = "" }) {
   try {
-    const result = await queryCurrentSprintWorkItemsFromAnalytics({ pat, org, project, team, iterationPath, areaPath });
-    return await enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterationPath, areaPath });
+    const result = await queryCurrentSprintWorkItemsFromAnalytics({ auth, org, project, team, iterationPath, areaPath });
+    return await enrichWorkItemsWithAssignedTo(result, { auth, org, project, iterationPath, areaPath });
   } catch (error) {
     try {
       const fallback = await queryCurrentSprintWorkItemsFromAnalytics({
-        pat,
+        auth,
         org,
         project,
         team,
@@ -669,7 +734,7 @@ async function queryCurrentSprintWorkItems({ pat, org, project, team, iterationP
       });
       fallback.analyticsError = error.message;
       return await enrichWorkItemsWithAssignedTo(fallback, {
-        pat,
+        auth,
         org,
         project,
         iterationPath,
@@ -677,7 +742,7 @@ async function queryCurrentSprintWorkItems({ pat, org, project, team, iterationP
         missingWarning: "Analytics WorkItems did not expose AssignedTo, and WIQL could not fill it for the sample list."
       });
     } catch (secondError) {
-      const fallback = await queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath });
+      const fallback = await queryCurrentSprintWorkItemsFromWiql({ auth, org, project, iterationPath, areaPath });
       fallback.warning = "Analytics WorkItems did not return cleanly, so SprintGen used a WIQL fallback scoped to the iteration.";
       fallback.analyticsError = secondError.message;
       return fallback;
@@ -685,14 +750,14 @@ async function queryCurrentSprintWorkItems({ pat, org, project, team, iterationP
   }
 }
 
-async function queryIterationWorkItems({ pat, org, project, team, iterationPath, areaPath = "" }) {
+async function queryIterationWorkItems({ auth, org, project, team, iterationPath, areaPath = "" }) {
   try {
-    const result = await queryIterationWorkItemsFromAnalytics({ pat, org, project, team, iterationPath, areaPath });
-    return await enrichWorkItemsWithAssignedTo(result, { pat, org, project, iterationPath, areaPath });
+    const result = await queryIterationWorkItemsFromAnalytics({ auth, org, project, team, iterationPath, areaPath });
+    return await enrichWorkItemsWithAssignedTo(result, { auth, org, project, iterationPath, areaPath });
   } catch (error) {
     try {
       const fallback = await queryIterationWorkItemsFromAnalytics({
-        pat,
+        auth,
         org,
         project,
         team,
@@ -702,7 +767,7 @@ async function queryIterationWorkItems({ pat, org, project, team, iterationPath,
       });
       fallback.analyticsError = error.message;
       return await enrichWorkItemsWithAssignedTo(fallback, {
-        pat,
+        auth,
         org,
         project,
         iterationPath,
@@ -712,7 +777,7 @@ async function queryIterationWorkItems({ pat, org, project, team, iterationPath,
     } catch (assignedToError) {
       try {
         const fallback = await queryIterationWorkItemsFromAnalytics({
-          pat,
+          auth,
           org,
           project,
           team,
@@ -722,11 +787,11 @@ async function queryIterationWorkItems({ pat, org, project, team, iterationPath,
         });
         fallback.warning = "Analytics WorkItems did not expose StateCategory, so SprintGen used state names for completion checks.";
         fallback.analyticsError = assignedToError.message;
-        return await enrichWorkItemsWithAssignedTo(fallback, { pat, org, project, iterationPath, areaPath });
+        return await enrichWorkItemsWithAssignedTo(fallback, { auth, org, project, iterationPath, areaPath });
       } catch (stateCategoryError) {
         try {
           const fallback = await queryIterationWorkItemsFromAnalytics({
-            pat,
+            auth,
             org,
             project,
             team,
@@ -738,7 +803,7 @@ async function queryIterationWorkItems({ pat, org, project, team, iterationPath,
           fallback.warning = "Analytics WorkItems did not expose StateCategory, so SprintGen used state names for completion checks.";
           fallback.analyticsError = stateCategoryError.message;
           return await enrichWorkItemsWithAssignedTo(fallback, {
-            pat,
+            auth,
             org,
             project,
             iterationPath,
@@ -746,7 +811,7 @@ async function queryIterationWorkItems({ pat, org, project, team, iterationPath,
             missingWarning: "Analytics WorkItems did not expose AssignedTo, and WIQL could not fill contributor names for this sprint."
           });
         } catch (secondError) {
-          const fallback = await queryCurrentSprintWorkItemsFromWiql({ pat, org, project, iterationPath, areaPath });
+          const fallback = await queryCurrentSprintWorkItemsFromWiql({ auth, org, project, iterationPath, areaPath });
           fallback.warning = "Analytics WorkItems did not return cleanly, so SprintGen used a WIQL fallback scoped to the iteration.";
           fallback.analyticsError = secondError.message;
           return fallback;
@@ -808,5 +873,6 @@ module.exports = {
   queryIterationWorkItems,
   queryStoryPointBurndown,
   resolveIterationInput,
+  setAdoAuthProvider,
   summarizeBurndownRows
 };
