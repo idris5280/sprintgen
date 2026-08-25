@@ -119,19 +119,28 @@ $reviewContainerId = "$($storage.id)/blobServices/default/containers/$ReviewCont
 
 try {
   $authConfig = Invoke-AzureJson -Arguments @(
-    "rest", "--method", "get",
-    "--url", "https://management.azure.com$($containerApp.id)/authConfigs/current?api-version=2025-07-01"
+    "containerapp", "auth", "show",
+    "--name", $ContainerAppName,
+    "--resource-group", $ResourceGroup
   )
 } catch {
-  $authConfig = $null
+  $cliAuthError = $_.Exception.Message
+  try {
+    $authConfig = Invoke-AzureJson -Arguments @(
+      "rest", "--method", "get",
+      "--url", "https://management.azure.com$($containerApp.id)/authConfigs/current?api-version=2025-07-01"
+    )
+  } catch {
+    throw "Could not read Cyber-managed Easy Auth. Azure CLI: $cliAuthError REST fallback: $($_.Exception.Message) Ask Cyber to confirm that your deployment account can read authConfigs/current."
+  }
 }
 
 $authEnabled = [bool](Get-NestedValue -Root $authConfig -Path @("properties", "platform", "enabled"))
 $requireAuthentication = [bool](Get-NestedValue -Root $authConfig -Path @("properties", "globalValidation", "requireAuthentication"))
-$allowedGroups = @(Get-NestedValue -Root $authConfig -Path @(
-  "properties", "identityProviders", "azureActiveDirectory", "validation",
-  "defaultAuthorizationPolicy", "allowedPrincipals", "groups"
-)) | Where-Object { $_ }
+$allowedGroups = @(@(Get-NestedValue -Root $authConfig -Path @(
+    "properties", "identityProviders", "azureActiveDirectory", "validation",
+    "defaultAuthorizationPolicy", "allowedPrincipals", "groups"
+  )) | Where-Object { $_ })
 $credentialSettingName = [string](Get-NestedValue -Root $authConfig -Path @(
   "properties", "identityProviders", "azureActiveDirectory", "registration", "clientSecretSettingName"
 ))

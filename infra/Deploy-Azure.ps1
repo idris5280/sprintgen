@@ -44,10 +44,18 @@ function Get-StringHash {
 
 function Get-AuthenticationBoundary {
   param([string]$AppId)
-  $auth = Invoke-AzureJson -Arguments @(
-    "rest", "--method", "get",
-    "--url", "https://management.azure.com$AppId/authConfigs/current?api-version=2025-07-01"
-  )
+  try {
+    $auth = Invoke-AzureJson -Arguments @(
+      "containerapp", "auth", "show",
+      "--name", $ContainerAppName,
+      "--resource-group", $ResourceGroup
+    )
+  } catch {
+    $auth = Invoke-AzureJson -Arguments @(
+      "rest", "--method", "get",
+      "--url", "https://management.azure.com$AppId/authConfigs/current?api-version=2025-07-01"
+    )
+  }
   $canonicalAuth = $auth.properties | ConvertTo-Json -Depth 100 -Compress
   $secretNames = @(& az containerapp secret list `
     --name $ContainerAppName `
