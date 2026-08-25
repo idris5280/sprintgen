@@ -37,7 +37,6 @@ function Add-Check {
 
   if ($FailureLevel -eq "warning") {
     $script:warnings.Add("$Name`: $Detail")
-    Write-Warning "$Name - $Detail"
   } else {
     $script:blockers.Add("$Name`: $Detail")
     Write-Host "[BLOCKED] $Name - $Detail" -ForegroundColor Red
@@ -135,14 +134,15 @@ try {
   }
 }
 
-$authEnabled = [bool](Get-NestedValue -Root $authConfig -Path @("properties", "platform", "enabled"))
-$requireAuthentication = [bool](Get-NestedValue -Root $authConfig -Path @("properties", "globalValidation", "requireAuthentication"))
-$allowedGroups = @(@(Get-NestedValue -Root $authConfig -Path @(
-    "properties", "identityProviders", "azureActiveDirectory", "validation",
+$authProperties = if ($authConfig.PSObject.Properties["properties"]) { $authConfig.properties } else { $authConfig }
+$authEnabled = [bool](Get-NestedValue -Root $authProperties -Path @("platform", "enabled"))
+$requireAuthentication = [bool](Get-NestedValue -Root $authProperties -Path @("globalValidation", "requireAuthentication"))
+$allowedGroups = @(@(Get-NestedValue -Root $authProperties -Path @(
+    "identityProviders", "azureActiveDirectory", "validation",
     "defaultAuthorizationPolicy", "allowedPrincipals", "groups"
   )) | Where-Object { $_ })
-$credentialSettingName = [string](Get-NestedValue -Root $authConfig -Path @(
-  "properties", "identityProviders", "azureActiveDirectory", "registration", "clientSecretSettingName"
+$credentialSettingName = [string](Get-NestedValue -Root $authProperties -Path @(
+  "identityProviders", "azureActiveDirectory", "registration", "clientSecretSettingName"
 ))
 
 Add-Check -Name "Easy Auth enabled" -Passed ($authEnabled -and $requireAuthentication) -Detail $(

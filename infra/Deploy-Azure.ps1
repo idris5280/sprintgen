@@ -56,7 +56,8 @@ function Get-AuthenticationBoundary {
       "--url", "https://management.azure.com$AppId/authConfigs/current?api-version=2025-07-01"
     )
   }
-  $canonicalAuth = $auth.properties | ConvertTo-Json -Depth 100 -Compress
+  $authProperties = if ($auth.PSObject.Properties["properties"]) { $auth.properties } else { $auth }
+  $canonicalAuth = $authProperties | ConvertTo-Json -Depth 100 -Compress
   $secretNames = @(& az containerapp secret list `
     --name $ContainerAppName `
     --resource-group $ResourceGroup `

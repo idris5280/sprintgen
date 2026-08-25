@@ -46,6 +46,7 @@ test("preflight checks Easy Auth group restriction, identity, RBAC, and runtime"
   const preflight = read("infra", "Test-AzurePreflight.ps1");
 
   assert.match(preflight, /authConfigs\/current\?api-version=2025-07-01/);
+  assert.match(preflight, /PSObject\.Properties\["properties"\]/);
   assert.match(preflight, /defaultAuthorizationPolicy[\s\S]*allowedPrincipals[\s\S]*groups/);
   assert.match(preflight, /Managed identity attached/);
   assert.match(preflight, /AcrPull/);
