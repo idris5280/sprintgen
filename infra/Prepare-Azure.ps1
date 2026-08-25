@@ -9,7 +9,9 @@ param(
   [string]$IdentityName = "umi-scrumstudio",
   [string]$StorageAccountName = "scrumstudioblob",
   [string]$ReviewContainer = "scrum-studio",
-  [string]$StateContainer = "scrum-studio-tfstate"
+  [string]$StateContainer = "scrum-studio-tfstate",
+  [string]$AdoOrg = "esiappdev",
+  [string]$AdoProject = "Digital Transformation"
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,4 +100,17 @@ $result = [ordered]@{
 $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $discoveryPath -Encoding utf8
 Write-Host "Azure resource discovery completed."
 Write-Host "Non-secret discovery details: $discoveryPath"
-Write-Host "Next: complete terraform.tfvars, have an administrator grant the required RBAC roles, then run Deploy-Azure.ps1."
+
+Write-Host "Running the read-only authentication, identity, and RBAC preflight..."
+& (Join-Path $PSScriptRoot "Test-AzurePreflight.ps1") `
+  -SubscriptionId $SubscriptionId `
+  -ResourceGroup $ResourceGroup `
+  -RegistryName $RegistryName `
+  -ContainerAppName $ContainerAppName `
+  -IdentityName $IdentityName `
+  -StorageAccountName $StorageAccountName `
+  -ReviewContainer $ReviewContainer `
+  -AdoOrg $AdoOrg `
+  -AdoProject $AdoProject | Out-Null
+
+Write-Host "Next: complete terraform.tfvars with non-secret application values, resolve any preflight warnings with the appropriate administrator, then run Deploy-Azure.ps1."

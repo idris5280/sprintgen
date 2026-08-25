@@ -22,11 +22,6 @@ data "azurerm_storage_account" "studio" {
   resource_group_name = var.resource_group_name
 }
 
-data "azurerm_key_vault" "studio" {
-  name                = var.key_vault_name
-  resource_group_name = var.resource_group_name
-}
-
 locals {
   storage_container_id = "${data.azurerm_storage_account.studio.id}/blobServices/default/containers/${var.storage_container}"
 }
@@ -82,13 +77,6 @@ resource "azurerm_role_assignment" "acr_pull" {
   principal_id         = data.azurerm_user_assigned_identity.studio.principal_id
 }
 
-resource "azurerm_role_assignment" "key_vault" {
-  count                = var.manage_role_assignments ? 1 : 0
-  scope                = data.azurerm_key_vault.studio.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = data.azurerm_user_assigned_identity.studio.principal_id
-}
-
 resource "azurerm_container_app" "studio" {
   name                         = var.container_app_name
   resource_group_name          = data.azurerm_resource_group.studio.name
@@ -118,12 +106,6 @@ resource "azurerm_container_app" "studio" {
     }
   }
 
-  secret {
-    name                = "easy-auth-client-secret"
-    identity            = data.azurerm_user_assigned_identity.studio.id
-    key_vault_secret_id = var.easy_auth_client_secret_key_vault_uri
-  }
-
   template {
     min_replicas                     = var.min_replicas
     max_replicas                     = var.max_replicas
@@ -139,43 +121,6 @@ resource "azurerm_container_app" "studio" {
       image  = var.container_image
       cpu    = 1
       memory = "2Gi"
-
-      env {
-        name  = "NODE_ENV"
-        value = "production"
-      }
-      env {
-        name  = "PORT"
-        value = "3000"
-      }
-      env {
-        name  = "AZURE_CLIENT_ID"
-        value = data.azurerm_user_assigned_identity.studio.client_id
-      }
-      env {
-        name  = "ADO_ORG"
-        value = var.ado_org
-      }
-      env {
-        name  = "ADO_PROJECT"
-        value = var.ado_project
-      }
-      env {
-        name  = "AZURE_STORAGE_ACCOUNT_URL"
-        value = data.azurerm_storage_account.studio.primary_blob_endpoint
-      }
-      env {
-        name  = "AZURE_STORAGE_CONTAINER"
-        value = var.storage_container
-      }
-      env {
-        name  = "APPLICATIONINSIGHTS_CONNECTION_STRING"
-        value = azurerm_application_insights.studio.connection_string
-      }
-      env {
-        name        = "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET"
-        secret_name = "easy-auth-client-secret"
-      }
 
       startup_probe {
         transport               = "HTTP"
@@ -207,52 +152,15 @@ resource "azurerm_container_app" "studio" {
   }
 
   depends_on = [azapi_update_resource.blob_data_protection]
-}
 
-resource "azapi_resource" "easy_auth" {
-  type      = "Microsoft.App/containerApps/authConfigs@2025-01-01"
-  name      = "current"
-  parent_id = azurerm_container_app.studio.id
-  body = {
-    properties = {
-      platform = {
-        enabled = true
-      }
-      globalValidation = {
-        requireAuthentication       = true
-        unauthenticatedClientAction = "RedirectToLoginPage"
-        redirectToProvider          = "azureactivedirectory"
-        excludedPaths               = ["/health/live", "/health/ready"]
-      }
-      identityProviders = {
-        azureActiveDirectory = {
-          registration = {
-            clientId                = var.entra_client_id
-            clientSecretSettingName = "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET"
-            openIdIssuer            = "https://login.microsoftonline.com/${var.entra_tenant_id}/v2.0"
-          }
-          validation = {
-            allowedAudiences = [var.entra_client_id]
-            defaultAuthorizationPolicy = {
-              allowedPrincipals = {
-                groups = [var.entra_group_object_id]
-              }
-            }
-          }
-        }
-      }
-      login = {
-        tokenStore = {
-          enabled = false
-        }
-      }
-      httpSettings = {
-        requireHttps = true
-        routes = {
-          apiPrefix = "/.auth"
-        }
-      }
-    }
+  # Cyber owns Easy Auth and its credential. Terraform owns only the application
+  # runtime and must preserve all existing Container App secrets during updates.
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      secret,
+      template[0].container[0].env
+    ]
   }
 }
 
@@ -268,6 +176,19 @@ output "storage_container_id" {
   value = local.storage_container_id
 }
 
+output "managed_identity_client_id" {
+  value = data.azurerm_user_assigned_identity.studio.client_id
+}
+
+output "application_insights_connection_string" {
+  value     = azurerm_application_insights.studio.connection_string
+  sensitive = true
+}
+
 output "required_admin_role_assignments" {
-  value = var.manage_role_assignments ? "Managed by Terraform." : "An administrator must grant AcrPull, Storage Blob Data Contributor, and Key Vault Secrets User to ${data.azurerm_user_assigned_identity.studio.name}."
+  value = var.manage_role_assignments ? "Managed by Terraform." : "An administrator must grant AcrPull and Storage Blob Data Contributor to ${data.azurerm_user_assigned_identity.studio.name}."
+}
+
+output "authentication_ownership" {
+  value = "Container Apps Easy Auth, its Entra registration, authorization group, and credential are externally managed by Cyber and are not owned by this Terraform configuration."
 }

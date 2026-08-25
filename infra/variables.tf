@@ -51,41 +51,13 @@ variable "container_image" {
 variable "ado_org" {
   type        = string
   description = "Azure DevOps organization name."
+  default     = "esiappdev"
 }
 
 variable "ado_project" {
   type        = string
   description = "Azure DevOps project name."
   default     = "Digital Transformation"
-}
-
-variable "entra_client_id" {
-  type        = string
-  description = "Client ID of the Entra app registration used by Container Apps Easy Auth."
-}
-
-variable "entra_tenant_id" {
-  type        = string
-  description = "Company Microsoft Entra tenant ID."
-}
-
-variable "entra_group_object_id" {
-  type        = string
-  description = "Object ID of the Scrum Studio Users Entra security group."
-}
-
-variable "key_vault_name" {
-  type        = string
-  description = "Existing Key Vault containing the Easy Auth client credential."
-}
-
-variable "easy_auth_client_secret_key_vault_uri" {
-  type        = string
-  description = "Versioned or versionless Key Vault secret URI. This is not the secret value."
-  validation {
-    condition     = can(regex("^https://[a-zA-Z0-9-]+\\.vault\\.azure\\.net/secrets/[a-zA-Z0-9-]+(/[a-zA-Z0-9]+)?$", var.easy_auth_client_secret_key_vault_uri))
-    error_message = "Provide a Key Vault secret URI, not an Entra client secret value."
-  }
 }
 
 variable "manage_role_assignments" {
