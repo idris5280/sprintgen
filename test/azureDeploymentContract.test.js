@@ -86,5 +86,6 @@ test("Azure defaults target the confirmed Scrum Studio resources", () => {
   assert.match(example, /storage_account_name\s*=\s*"sascrumstudio"/);
   assert.match(example, /storage_container\s*=\s*"scrum-studio"/);
   assert.match(example, /state_storage_account_name\s*=\s*"sascrumstudio"/);
-  assert.match(example, /state_container_name\s*=\s*"scrum-studio-tfstate"/);
+  assert.match(example, /state_container_name\s*=\s*"scrum-studio"/);
+  assert.match(read("infra", "Deploy-Azure.ps1"), /key=terraform\/scrum-studio\.tfstate/);
 });

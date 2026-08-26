@@ -10,7 +10,7 @@ storage_account_name                = "sascrumstudio"
 storage_container                   = "scrum-studio"
 state_storage_account_name          = "sascrumstudio"
 state_storage_resource_group_name   = "rg-scrumstudio"
-state_container_name                = "scrum-studio-tfstate"
+state_container_name                = "scrum-studio"
 
 # Use the immutable digest returned after the ACR cloud build.
 container_image = "acrscrumstudio.azurecr.io/scrum-studio@sha256:0000000000000000000000000000000000000000000000000000000000000000"

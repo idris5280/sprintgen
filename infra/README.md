@@ -11,7 +11,7 @@ This deployment updates the application runtime in the existing Scrum Studio res
 - Managed identity: `umi-scrumstudio`
 - Cyber-managed storage account: `sascrumstudio`
 - Private review container: `scrum-studio`
-- Terraform state container: `scrum-studio-tfstate`
+- Terraform state: `terraform/scrum-studio.tfstate` in the private `scrum-studio` container
 - Azure DevOps organization: `esiappdev`
 
 The replacement storage account contains no legacy data to migrate.
@@ -37,9 +37,8 @@ Cyber must confirm:
 
 1. Private container `scrum-studio` exists in `sascrumstudio`.
 2. `umi-scrumstudio` has `Storage Blob Data Contributor` on that container or a parent scope.
-3. Private container `scrum-studio-tfstate` exists in `sascrumstudio`, or Cyber provides the approved backend account, resource group, and container.
-4. The deployment operator can access the Terraform backend with Azure AD authentication.
-5. Storage networking allows the Container App to reach review data and the deployment process to reach Terraform state.
+3. The deployment operator can access the `scrum-studio` container as the Azure AD Terraform backend.
+4. Storage networking allows the Container App to reach review data and the deployment process to reach Terraform state.
 
 Cyber confirmed that `umi-scrumstudio` belongs to the `Digital Transformation` Readers group in Azure DevOps organization `esiappdev`. This is verified after deployment with a Team -> Sprint -> Work Areas smoke test because Azure Resource Manager cannot inspect ADO permissions.
 
@@ -64,7 +63,7 @@ Copy-Item terraform.tfvars.example terraform.tfvars
 - Any group list exposed by Easy Auth is reported, but Cyber may enforce group assignment in Entra instead.
 - `umi-scrumstudio` is attached to the Container App.
 - Required ACR and Blob RBAC assignments exist.
-- Review and Terraform-state containers exist and are private.
+- The shared review/Terraform container exists and is private.
 - The deployment identity can access the Terraform backend.
 - `AZURE_CLIENT_ID` matches the identity client ID.
 - Required runtime environment variables are present or identifies those the first application update will set.
@@ -128,3 +127,5 @@ Read `infra/local/last-deployment.json`, then redeploy the recorded `previousIma
 - Application Insights receives request, dependency, error, and correlation data.
 
 Storage security, retention, networking, shared-key policy, and recovery settings remain entirely Cyber-managed.
+
+For the pilot, application data and Terraform state share one private container. Application data remains under `users/`; Terraform uses the distinct blob key `terraform/scrum-studio.tfstate`. Backend account and container parameters remain overridable if Cyber later provides a centralized Terraform backend.

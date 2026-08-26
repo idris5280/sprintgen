@@ -53,8 +53,8 @@ variable "state_storage_resource_group_name" {
 
 variable "state_container_name" {
   type        = string
-  description = "Private container used by Terraform's Azure AD backend."
-  default     = "scrum-studio-tfstate"
+  description = "Private container used by Terraform's Azure AD backend; defaults to the application container for the pilot."
+  default     = "scrum-studio"
 }
 
 variable "container_image" {

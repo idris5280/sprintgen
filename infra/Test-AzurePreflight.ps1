@@ -10,7 +10,7 @@ param(
   [string]$ReviewContainer = "scrum-studio",
   [string]$StateStorageAccountName = "sascrumstudio",
   [string]$StateStorageResourceGroup = "",
-  [string]$StateContainer = "scrum-studio-tfstate",
+  [string]$StateContainer = "scrum-studio",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation",
   [switch]$StrictRuntimeConfiguration,
@@ -171,7 +171,11 @@ $stateStorage = if ($StateStorageAccountName -eq $StorageAccountName -and $State
   Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StateStorageAccountName, "--resource-group", $StateStorageResourceGroup)
 }
 $reviewContainer = Get-ContainerInfo -StorageId $storage.id -Name $ReviewContainer
-$stateContainerInfo = Get-ContainerInfo -StorageId $stateStorage.id -Name $StateContainer
+$stateContainerInfo = if ($stateStorage.id -eq $storage.id -and $StateContainer -eq $ReviewContainer) {
+  $reviewContainer
+} else {
+  Get-ContainerInfo -StorageId $stateStorage.id -Name $StateContainer
+}
 
 Add-Check -Name "Review Blob container" -Passed ($reviewContainer.found -and $reviewContainer.private) -Detail $(
   if (-not $reviewContainer.found) { "Cyber must provision private container '$ReviewContainer' in $StorageAccountName." }
@@ -181,7 +185,7 @@ Add-Check -Name "Review Blob container" -Passed ($reviewContainer.found -and $re
 Add-Check -Name "Terraform state container" -Passed ($stateContainerInfo.found -and $stateContainerInfo.private) -Detail $(
   if (-not $stateContainerInfo.found) { "Cyber must provision private backend container '$StateContainer' in $StateStorageAccountName or provide the approved backend." }
   elseif (-not $stateContainerInfo.private) { "State container '$StateContainer' permits public access ('$($stateContainerInfo.publicAccess)'). Cyber must make it private." }
-  else { "Private backend container '$StateContainer' exists in $StateStorageAccountName." }
+  else { "Private backend container '$StateContainer' exists in $StateStorageAccountName; state uses blob key 'terraform/scrum-studio.tfstate'." }
 )
 
 $stateAccess = $false

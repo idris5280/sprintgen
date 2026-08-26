@@ -12,7 +12,7 @@ param(
   [string]$ReviewContainer = "scrum-studio",
   [string]$StateStorageAccountName = "sascrumstudio",
   [string]$StateStorageResourceGroup = "",
-  [string]$StateContainer = "scrum-studio-tfstate",
+  [string]$StateContainer = "scrum-studio",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation",
   [string]$LogAnalyticsWorkspaceName = "law-scrumstudio",
@@ -215,7 +215,7 @@ try {
     -backend-config="resource_group_name=$StateStorageResourceGroup" `
     -backend-config="storage_account_name=$StateStorageAccountName" `
     -backend-config="container_name=$StateContainer" `
-    -backend-config="key=scrum-studio.tfstate" `
+    -backend-config="key=terraform/scrum-studio.tfstate" `
     -backend-config="use_azuread_auth=true"
   if ($LASTEXITCODE -ne 0) { throw "Terraform backend initialization failed." }
 

@@ -11,7 +11,7 @@ param(
   [string]$ReviewContainer = "scrum-studio",
   [string]$StateStorageAccountName = "sascrumstudio",
   [string]$StateStorageResourceGroup = "",
-  [string]$StateContainer = "scrum-studio-tfstate",
+  [string]$StateContainer = "scrum-studio",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation"
 )
@@ -70,7 +70,11 @@ $stateStorage = if ($StateStorageAccountName -eq $StorageAccountName -and $State
 }
 
 $reviewContainerId = Get-PrivateContainer -StorageId $storage.id -Name $ReviewContainer
-$stateContainerId = Get-PrivateContainer -StorageId $stateStorage.id -Name $StateContainer
+$stateContainerId = if ($stateStorage.id -eq $storage.id -and $StateContainer -eq $ReviewContainer) {
+  $reviewContainerId
+} else {
+  Get-PrivateContainer -StorageId $stateStorage.id -Name $StateContainer
+}
 
 $localDirectory = Join-Path $PSScriptRoot "local"
 New-Item -ItemType Directory -Path $localDirectory -Force | Out-Null
