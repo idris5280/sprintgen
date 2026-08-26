@@ -4,6 +4,8 @@
 .codex
 .agents
 node_modules
+**/node_modules
+**/node_modules/**
 output
 runtime
 input
@@ -12,7 +14,6 @@ test
 infra
 scripts
 apps/*/dist
-apps/*/node_modules
 Start Scrum Studio.bat
 npm-debug.log
 .DS_Store
