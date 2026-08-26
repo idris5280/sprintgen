@@ -85,9 +85,9 @@ Authenticated JSON APIs live under `/api`. Liveness is `/health/live`; readiness
 
 The multi-stage Dockerfile builds the Fluent application and runs the server as a non-root user on the Playwright `1.60.0` image. The image contains the application at build time, has no application home directory, and never downloads source during startup.
 
-Terraform configuration and the Azure Cloud Shell deployment scripts are in `infra/`. They adopt the existing `rg-scrumstudio` resources by name and configure the application runtime, Blob protection, probes, telemetry, and pilot scaling. Easy Auth, its Entra authorization group and credential, and existing Container App secrets remain externally managed by Cyber and are explicitly excluded from deployment ownership.
+Cyber's infrastructure repository is the source of truth for Azure resources, permissions, networking, Easy Auth, and Container App configuration. This repository owns only the application source and Docker image. Build and publish immutable images through the company deployment process and Azure Container Registry.
 
-Build and publish immutable images through the company pipeline and Azure Container Registry.
+See [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) for the container runtime contract and production verification checklist.
 
 ## Artifact boundary
 
