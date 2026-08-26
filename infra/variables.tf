@@ -31,12 +31,30 @@ variable "managed_identity_name" {
 
 variable "storage_account_name" {
   type    = string
-  default = "scrumstudioblob"
+  default = "sascrumstudio"
 }
 
 variable "storage_container" {
   type    = string
   default = "scrum-studio"
+}
+
+variable "state_storage_account_name" {
+  type        = string
+  description = "Cyber-approved storage account containing the Terraform state container."
+  default     = "sascrumstudio"
+}
+
+variable "state_storage_resource_group_name" {
+  type        = string
+  description = "Resource group containing the Cyber-approved Terraform state account."
+  default     = "rg-scrumstudio"
+}
+
+variable "state_container_name" {
+  type        = string
+  description = "Private container used by Terraform's Azure AD backend."
+  default     = "scrum-studio-tfstate"
 }
 
 variable "container_image" {
@@ -58,12 +76,6 @@ variable "ado_project" {
   type        = string
   description = "Azure DevOps project name."
   default     = "Digital Transformation"
-}
-
-variable "manage_role_assignments" {
-  type        = bool
-  description = "Set true only when Terraform is run by an Owner, RBAC Administrator, or User Access Administrator."
-  default     = false
 }
 
 variable "log_analytics_workspace_name" {

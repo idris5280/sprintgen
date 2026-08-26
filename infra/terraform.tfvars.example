@@ -6,8 +6,11 @@ container_registry_name             = "acrscrumstudio"
 container_app_environment_name      = "cae-scrumstudio"
 container_app_name                  = "ca-scrumstudio"
 managed_identity_name               = "umi-scrumstudio"
-storage_account_name                = "scrumstudioblob"
+storage_account_name                = "sascrumstudio"
 storage_container                   = "scrum-studio"
+state_storage_account_name          = "sascrumstudio"
+state_storage_resource_group_name   = "rg-scrumstudio"
+state_container_name                = "scrum-studio-tfstate"
 
 # Use the immutable digest returned after the ACR cloud build.
 container_image = "acrscrumstudio.azurecr.io/scrum-studio@sha256:0000000000000000000000000000000000000000000000000000000000000000"
@@ -17,9 +20,6 @@ ado_project = "Digital Transformation"
 
 # Easy Auth, its Entra application, authorization group, credential, and all
 # existing Container App secrets are externally managed by Cyber.
-
-# Leave false when deploying with Contributor. An RBAC administrator grants these roles separately.
-manage_role_assignments = false
 
 min_replicas = 1
 max_replicas = 3

@@ -6,8 +6,11 @@ param(
   [string]$RegistryName = "acrscrumstudio",
   [string]$ContainerAppName = "ca-scrumstudio",
   [string]$IdentityName = "umi-scrumstudio",
-  [string]$StorageAccountName = "scrumstudioblob",
+  [string]$StorageAccountName = "sascrumstudio",
   [string]$ReviewContainer = "scrum-studio",
+  [string]$StateStorageAccountName = "sascrumstudio",
+  [string]$StateStorageResourceGroup = "",
+  [string]$StateContainer = "scrum-studio-tfstate",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation",
   [switch]$StrictRuntimeConfiguration,
@@ -16,6 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+if (-not $StateStorageResourceGroup) { $StateStorageResourceGroup = $ResourceGroup }
 
 $script:blockers = [System.Collections.Generic.List[string]]::new()
 $script:warnings = [System.Collections.Generic.List[string]]::new()
@@ -80,6 +84,53 @@ function Test-RoleAssignment {
   }
 }
 
+function Get-ContainerInfo {
+  param([string]$StorageId, [string]$Name)
+  $id = "$StorageId/blobServices/default/containers/$Name"
+  try {
+    $resource = Invoke-AzureJson -Arguments @(
+      "resource", "show", "--ids", $id, "--api-version", "2023-05-01"
+    )
+    $publicAccess = [string](Get-NestedValue -Root $resource -Path @("properties", "publicAccess"))
+    return [ordered]@{
+      found = $true
+      id = $id
+      private = (-not $publicAccess -or $publicAccess -eq "None")
+      publicAccess = $publicAccess
+    }
+  } catch {
+    return [ordered]@{ found = $false; id = $id; private = $false; publicAccess = "" }
+  }
+}
+
+function Get-AnonymousAccessResult {
+  param([string]$Uri)
+  $handler = [System.Net.Http.HttpClientHandler]::new()
+  $handler.AllowAutoRedirect = $false
+  $client = [System.Net.Http.HttpClient]::new($handler)
+  $client.Timeout = [TimeSpan]::FromSeconds(20)
+  try {
+    $response = $client.GetAsync($Uri).GetAwaiter().GetResult()
+    $status = [int]$response.StatusCode
+    $location = if ($response.Headers.Location) { [string]$response.Headers.Location } else { "" }
+    $isAuthRedirect = $status -ge 300 -and $status -lt 400 -and (
+      $location -match "(?i)/\.auth/" -or $location -match "(?i)login\.microsoftonline\.com"
+    )
+    return [ordered]@{
+      checked = $true
+      status = $status
+      location = $location
+      protected = ($status -in @(401, 403) -or $isAuthRedirect)
+      error = ""
+    }
+  } catch {
+    return [ordered]@{ checked = $false; status = 0; location = ""; protected = $false; error = $_.Exception.Message }
+  } finally {
+    $client.Dispose()
+    $handler.Dispose()
+  }
+}
+
 function Get-EnvironmentMap {
   param([object]$ContainerApp)
   $map = @{}
@@ -114,7 +165,34 @@ $registry = Invoke-AzureJson -Arguments @("acr", "show", "--name", $RegistryName
 $containerApp = Invoke-AzureJson -Arguments @("containerapp", "show", "--name", $ContainerAppName, "--resource-group", $ResourceGroup)
 $identity = Invoke-AzureJson -Arguments @("identity", "show", "--name", $IdentityName, "--resource-group", $ResourceGroup)
 $storage = Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StorageAccountName, "--resource-group", $ResourceGroup)
-$reviewContainerId = "$($storage.id)/blobServices/default/containers/$ReviewContainer"
+$stateStorage = if ($StateStorageAccountName -eq $StorageAccountName -and $StateStorageResourceGroup -eq $ResourceGroup) {
+  $storage
+} else {
+  Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StateStorageAccountName, "--resource-group", $StateStorageResourceGroup)
+}
+$reviewContainer = Get-ContainerInfo -StorageId $storage.id -Name $ReviewContainer
+$stateContainerInfo = Get-ContainerInfo -StorageId $stateStorage.id -Name $StateContainer
+
+Add-Check -Name "Review Blob container" -Passed ($reviewContainer.found -and $reviewContainer.private) -Detail $(
+  if (-not $reviewContainer.found) { "Cyber must provision private container '$ReviewContainer' in $StorageAccountName." }
+  elseif (-not $reviewContainer.private) { "Container '$ReviewContainer' permits public access ('$($reviewContainer.publicAccess)'). Cyber must make it private." }
+  else { "Cyber-managed container '$ReviewContainer' exists and is private." }
+)
+Add-Check -Name "Terraform state container" -Passed ($stateContainerInfo.found -and $stateContainerInfo.private) -Detail $(
+  if (-not $stateContainerInfo.found) { "Cyber must provision private backend container '$StateContainer' in $StateStorageAccountName or provide the approved backend." }
+  elseif (-not $stateContainerInfo.private) { "State container '$StateContainer' permits public access ('$($stateContainerInfo.publicAccess)'). Cyber must make it private." }
+  else { "Private backend container '$StateContainer' exists in $StateStorageAccountName." }
+)
+
+$stateAccess = $false
+if ($stateContainerInfo.found) {
+  & az storage blob list --account-name $StateStorageAccountName --container-name $StateContainer --auth-mode login --num-results 1 --only-show-errors --output none 2>$null
+  $stateAccess = $LASTEXITCODE -eq 0
+}
+Add-Check -Name "Terraform state access" -Passed $stateAccess -Detail $(
+  if ($stateAccess) { "The deployment identity can access the Azure AD Terraform backend." }
+  else { "The deployment identity cannot read '$StateContainer' in $StateStorageAccountName. Cyber must grant backend access or provide an approved backend." }
+)
 
 try {
   $authConfig = Invoke-AzureJson -Arguments @(
@@ -137,6 +215,7 @@ try {
 $authProperties = if ($authConfig.PSObject.Properties["properties"]) { $authConfig.properties } else { $authConfig }
 $authEnabled = [bool](Get-NestedValue -Root $authProperties -Path @("platform", "enabled"))
 $requireAuthentication = [bool](Get-NestedValue -Root $authProperties -Path @("globalValidation", "requireAuthentication"))
+$unauthenticatedAction = [string](Get-NestedValue -Root $authProperties -Path @("globalValidation", "unauthenticatedClientAction"))
 $allowedGroups = @(@(Get-NestedValue -Root $authProperties -Path @(
     "identityProviders", "azureActiveDirectory", "validation",
     "defaultAuthorizationPolicy", "allowedPrincipals", "groups"
@@ -145,13 +224,24 @@ $credentialSettingName = [string](Get-NestedValue -Root $authProperties -Path @(
   "identityProviders", "azureActiveDirectory", "registration", "clientSecretSettingName"
 ))
 
-Add-Check -Name "Easy Auth enabled" -Passed ($authEnabled -and $requireAuthentication) -Detail $(
-  if ($authEnabled -and $requireAuthentication) { "Platform authentication is enabled and requires authentication." }
-  else { "Cyber must enable Container Apps Easy Auth and require authentication before deployment." }
+$protectedAction = $unauthenticatedAction -in @("RedirectToLoginPage", "Return401", "Return403")
+Add-Check -Name "Easy Auth enabled" -Passed ($authEnabled -and ($requireAuthentication -or $protectedAction)) -Detail $(
+  if ($authEnabled -and ($requireAuthentication -or $protectedAction)) { "Platform authentication is enabled and challenges unauthenticated users." }
+  else { "Cyber must configure Container Apps Easy Auth to reject or redirect unauthenticated users before deployment." }
 )
-Add-Check -Name "Authorization group restriction" -Passed ($allowedGroups.Count -gt 0) -Detail $(
+Add-Check -Name "Authorization group visibility" -Passed ($allowedGroups.Count -gt 0) -FailureLevel "warning" -Detail $(
   if ($allowedGroups.Count -gt 0) { "$($allowedGroups.Count) externally managed Entra group restriction(s) found." }
-  else { "No allowed-principals group was found in authConfigs/current. Cyber must restore the existing group restriction." }
+  else { "No group list is exposed in authConfigs/current. Cyber confirmed that access is enforced externally through Entra, so this is informational." }
+)
+
+$fqdn = [string](Get-NestedValue -Root $containerApp -Path @("properties", "configuration", "ingress", "fqdn"))
+$anonymousAccess = if ($fqdn) { Get-AnonymousAccessResult -Uri "https://$fqdn/" } else {
+  [ordered]@{ checked = $false; status = 0; location = ""; protected = $false; error = "Container App FQDN is missing." }
+}
+Add-Check -Name "Anonymous access denied" -Passed $anonymousAccess.protected -FailureLevel $(if ($StrictRuntimeConfiguration) { "blocker" } else { "warning" }) -Detail $(
+  if ($anonymousAccess.protected) { "Anonymous request received HTTP $($anonymousAccess.status) and was rejected or redirected to sign-in." }
+  elseif ($anonymousAccess.checked) { "Anonymous request received HTTP $($anonymousAccess.status). Cyber must ensure the application is not publicly accessible without sign-in." }
+  else { "Could not verify anonymous access: $($anonymousAccess.error)" }
 )
 
 $attachedIdentityIds = @()
@@ -171,10 +261,10 @@ Add-Check -Name "ACR pull role" -Passed $acrRole -Detail $(
   else { "An Azure RBAC administrator must grant AcrPull to $IdentityName on $RegistryName." }
 )
 
-$blobRole = Test-RoleAssignment -PrincipalId $identity.principalId -Scope $reviewContainerId -RoleName "Storage Blob Data Contributor"
+$blobRole = $reviewContainer.found -and (Test-RoleAssignment -PrincipalId $identity.principalId -Scope $reviewContainer.id -RoleName "Storage Blob Data Contributor")
 Add-Check -Name "Blob data role" -Passed $blobRole -Detail $(
   if ($blobRole) { "$IdentityName has Storage Blob Data Contributor on $ReviewContainer." }
-  else { "An Azure RBAC administrator must grant Storage Blob Data Contributor to $IdentityName at $reviewContainerId (or a parent scope)." }
+  else { "Cyber must grant Storage Blob Data Contributor to $IdentityName on '$ReviewContainer' or a parent scope." }
 )
 
 $environment = Get-EnvironmentMap -ContainerApp $containerApp
@@ -205,7 +295,7 @@ Add-Check -Name "Application Insights environment" -Passed $hasAppInsights -Fail
   else { "The application deployment must configure APPLICATIONINSIGHTS_CONNECTION_STRING." }
 )
 
-$script:warnings.Add("Azure DevOps access cannot be proven by Azure RBAC alone. An Azure DevOps administrator must confirm that $IdentityName (principal $($identity.principalId)) is added to organization '$AdoOrg' and project '$AdoProject' with team, iteration, work-item, area-path, and Analytics read access.")
+$script:warnings.Add("Cyber confirmed that $IdentityName is in the '$AdoProject' Readers group in '$AdoOrg'. Complete a Team -> Sprint -> Work Areas smoke test after deployment because Azure Resource Manager cannot validate Azure DevOps permissions.")
 
 $report = [ordered]@{
   checkedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -214,7 +304,9 @@ $report = [ordered]@{
   easyAuth = [ordered]@{
     enabled = $authEnabled
     requireAuthentication = $requireAuthentication
+    unauthenticatedClientAction = $unauthenticatedAction
     authorizationGroupCount = $allowedGroups.Count
+    anonymousStatus = $anonymousAccess.status
     credentialSettingName = $credentialSettingName
     ownership = "Cyber-managed; deployment must preserve authConfigs/current and Container App secrets."
   }
@@ -223,6 +315,13 @@ $report = [ordered]@{
     clientId = $identity.clientId
     principalId = $identity.principalId
     attached = $identityAttached
+  }
+  storage = [ordered]@{
+    account = $StorageAccountName
+    reviewContainer = $ReviewContainer
+    stateAccount = $StateStorageAccountName
+    stateContainer = $StateContainer
+    ownership = "Cyber-managed; application deployment only discovers and validates these resources."
   }
   checks = $script:checks
   warnings = $script:warnings

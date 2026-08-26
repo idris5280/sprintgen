@@ -9,16 +9,16 @@ This deployment updates the application runtime in the existing Scrum Studio res
 - Container App: `ca-scrumstudio`
 - Container Apps Environment: `cae-scrumstudio`
 - Managed identity: `umi-scrumstudio`
-- Storage account: `scrumstudioblob`
+- Cyber-managed storage account: `sascrumstudio`
 - Private review container: `scrum-studio`
 - Terraform state container: `scrum-studio-tfstate`
 - Azure DevOps organization: `esiappdev`
 
-The East US storage account is accepted for the pilot while the application remains in South Central US.
+The replacement storage account contains no legacy data to migrate.
 
 ## Ownership boundary
 
-Application deployment owns the image, runtime environment variables, probes, scaling, telemetry, Blob protection, and the attachment of `umi-scrumstudio`.
+Application deployment owns the image, runtime environment variables, probes, scaling, telemetry, and the attachment of `umi-scrumstudio`.
 
 Application deployment does **not** create, import, replace, or update:
 
@@ -27,18 +27,21 @@ Application deployment does **not** create, import, replace, or update:
 - The Entra authorization group or its membership
 - Existing Container App secrets
 - A Key Vault or Key Vault role assignment
+- Storage accounts, containers, protection settings, networking, or RBAC
 
 Terraform ignores the Container App secret collection and prevents destruction of the app. `Deploy-Azure.ps1` also rejects any plan that touches authentication or deletes/replaces the Container App, then verifies the Easy Auth configuration hash and secret-name set after apply.
 
 ## Administrator confirmations
 
-An Azure RBAC administrator must confirm:
+Cyber must confirm:
 
-1. `umi-scrumstudio` has `AcrPull` on `acrscrumstudio`.
-2. `umi-scrumstudio` has `Storage Blob Data Contributor` on the private `scrum-studio` container or a parent scope.
-3. The deployment operator has access to the `scrum-studio-tfstate` container for Terraform's Azure AD backend.
+1. Private container `scrum-studio` exists in `sascrumstudio`.
+2. `umi-scrumstudio` has `Storage Blob Data Contributor` on that container or a parent scope.
+3. Private container `scrum-studio-tfstate` exists in `sascrumstudio`, or Cyber provides the approved backend account, resource group, and container.
+4. The deployment operator can access the Terraform backend with Azure AD authentication.
+5. Storage networking allows the Container App to reach review data and the deployment process to reach Terraform state.
 
-An Azure DevOps administrator must confirm that `umi-scrumstudio` is added to organization `esiappdev` and project `Digital Transformation` with read access to teams, iterations, work items, area paths, and Analytics. Azure RBAC does not prove this ADO organization membership.
+Cyber confirmed that `umi-scrumstudio` belongs to the `Digital Transformation` Readers group in Azure DevOps organization `esiappdev`. This is verified after deployment with a Team -> Sprint -> Work Areas smoke test because Azure Resource Manager cannot inspect ADO permissions.
 
 Cyber has already provisioned Easy Auth and the authorization group. No app registration, group, group member list, client secret, or Key Vault secret value is required by this repository.
 
@@ -55,12 +58,14 @@ cd <cloned-repository>/infra
 Copy-Item terraform.tfvars.example terraform.tfvars
 ```
 
-`Prepare-Azure.ps1` discovers the existing resources, creates only missing private Blob containers, and runs the read-only preflight. The preflight confirms:
+`Prepare-Azure.ps1` only discovers existing resources and runs the read-only preflight. It never creates or changes storage. The preflight confirms:
 
-- Easy Auth is enabled and requires authentication.
-- At least one Entra authorization group restriction exists.
+- Easy Auth rejects anonymous access or redirects it to company sign-in.
+- Any group list exposed by Easy Auth is reported, but Cyber may enforce group assignment in Entra instead.
 - `umi-scrumstudio` is attached to the Container App.
 - Required ACR and Blob RBAC assignments exist.
+- Review and Terraform-state containers exist and are private.
+- The deployment identity can access the Terraform backend.
 - `AZURE_CLIENT_ID` matches the identity client ID.
 - Required runtime environment variables are present or identifies those the first application update will set.
 
@@ -89,7 +94,7 @@ The script:
 - Captures a fingerprint of Cyber-managed Easy Auth and the Container App secret names.
 - Builds an immutable image in `acrscrumstudio`.
 - Initializes remote Terraform state with Azure AD authentication.
-- Imports the existing Container App when needed.
+- Imports the existing Container App, Log Analytics workspace, and Application Insights resource when rebuilding an empty backend.
 - Releases legacy Easy Auth and Key Vault entries from Terraform state without deleting Azure resources.
 - Rejects unsafe Terraform plans.
 - Applies the application runtime update.
@@ -122,4 +127,4 @@ Read `infra/local/last-deployment.json`, then redeploy the recorded `previousIma
 - Screenshots, logos, HTML, PDF, and every presentation mode work.
 - Application Insights receives request, dependency, error, and correlation data.
 
-After the Blob flow and Terraform backend are verified, an administrator can disable storage account shared-key access. Keep public storage networking only for the pilot, then restrict it after the Container Apps outbound path is validated.
+Storage security, retention, networking, shared-key policy, and recovery settings remain entirely Cyber-managed.

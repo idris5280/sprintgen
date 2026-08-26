@@ -8,11 +8,15 @@ param(
   [string]$RegistryName = "acrscrumstudio",
   [string]$ContainerAppName = "ca-scrumstudio",
   [string]$IdentityName = "umi-scrumstudio",
-  [string]$StorageAccountName = "scrumstudioblob",
+  [string]$StorageAccountName = "sascrumstudio",
   [string]$ReviewContainer = "scrum-studio",
+  [string]$StateStorageAccountName = "sascrumstudio",
+  [string]$StateStorageResourceGroup = "",
   [string]$StateContainer = "scrum-studio-tfstate",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation",
+  [string]$LogAnalyticsWorkspaceName = "law-scrumstudio",
+  [string]$ApplicationInsightsName = "appi-scrumstudio",
   [string]$TfVarsPath = "terraform.tfvars",
   [string]$ExistingImage = "",
   [switch]$AutoApprove
@@ -20,6 +24,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+if (-not $StateStorageResourceGroup) { $StateStorageResourceGroup = $ResourceGroup }
 
 function Invoke-AzureJson {
   param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -79,7 +84,16 @@ function Remove-LegacyTerraformOwnership {
     Write-Host "No existing Terraform resources were available for legacy ownership cleanup."
     return
   }
-  foreach ($address in @("azapi_resource.easy_auth", "azurerm_role_assignment.key_vault", "azurerm_role_assignment.key_vault[0]")) {
+  foreach ($address in @(
+    "azapi_resource.easy_auth",
+    "azapi_update_resource.blob_data_protection",
+    "azurerm_role_assignment.key_vault",
+    "azurerm_role_assignment.key_vault[0]",
+    "azurerm_role_assignment.blob",
+    "azurerm_role_assignment.blob[0]",
+    "azurerm_role_assignment.acr_pull",
+    "azurerm_role_assignment.acr_pull[0]"
+  )) {
     if ($stateAddresses -contains $address) {
       Write-Host "Removing legacy Terraform ownership of $address without changing the Azure resource..."
       terraform state rm $address
@@ -98,9 +112,31 @@ function Assert-SafeTerraformPlan {
     if ($change.address -match "easy_auth|authConfigs|authentication" -or $change.type -match "authConfigs") {
       throw "Deployment stopped: Terraform plan attempts to manage Cyber-owned authentication resource '$($change.address)'."
     }
+    if ($change.type -match "^azurerm_(storage|role_assignment)" -or $change.type -match "^azapi") {
+      throw "Deployment stopped: Terraform plan attempts to mutate Cyber-owned storage or RBAC resource '$($change.address)'."
+    }
     if ($change.address -eq "azurerm_container_app.studio" -and $actions -contains "delete") {
       throw "Deployment stopped: Terraform plan would delete or replace ca-scrumstudio, which could destroy externally managed authentication state."
     }
+  }
+}
+
+function Get-ExistingAzureResourceId {
+  param([string[]]$Arguments)
+  $id = & az @Arguments --query id --output tsv --only-show-errors 2>$null
+  if ($LASTEXITCODE -ne 0) { return "" }
+  return [string]$id
+}
+
+function Import-ExistingTerraformResource {
+  param([string]$Address, [string]$ResourceId, [string[]]$TerraformVariables)
+  if (-not $ResourceId) { return }
+  terraform state show $Address *> $null
+  if ($LASTEXITCODE -eq 0) { return }
+  Write-Host "Importing existing application-owned resource: $Address"
+  terraform import @TerraformVariables $Address $ResourceId
+  if ($LASTEXITCODE -ne 0) {
+    throw "Terraform could not import existing resource $Address. No plan was applied."
   }
 }
 
@@ -137,6 +173,9 @@ Write-Host "Running the read-only deployment preflight. Easy Auth and existing s
   -IdentityName $IdentityName `
   -StorageAccountName $StorageAccountName `
   -ReviewContainer $ReviewContainer `
+  -StateStorageAccountName $StateStorageAccountName `
+  -StateStorageResourceGroup $StateStorageResourceGroup `
+  -StateContainer $StateContainer `
   -AdoOrg $AdoOrg `
   -AdoProject $AdoProject | Out-Null
 
@@ -173,8 +212,8 @@ if ($imageReference -notmatch '@sha256:[a-fA-F0-9]{64}$') {
 Push-Location $PSScriptRoot
 try {
   terraform init -reconfigure `
-    -backend-config="resource_group_name=$ResourceGroup" `
-    -backend-config="storage_account_name=$StorageAccountName" `
+    -backend-config="resource_group_name=$StateStorageResourceGroup" `
+    -backend-config="storage_account_name=$StateStorageAccountName" `
     -backend-config="container_name=$StateContainer" `
     -backend-config="key=scrum-studio.tfstate" `
     -backend-config="use_azuread_auth=true"
@@ -182,15 +221,35 @@ try {
 
   Remove-LegacyTerraformOwnership
 
-  terraform state show azurerm_container_app.studio *> $null
-  if ($LASTEXITCODE -ne 0) {
-    $containerAppId = & az containerapp show --name $ContainerAppName --resource-group $ResourceGroup --query id --output tsv --only-show-errors
-    terraform import -var-file=$resolvedTfVars -var="container_image=$imageReference" azurerm_container_app.studio $containerAppId
-    if ($LASTEXITCODE -ne 0) { throw "Terraform could not import the existing Container App." }
+  $terraformVariables = @(
+    "-var-file=$resolvedTfVars",
+    "-var=container_image=$imageReference",
+    "-var=storage_account_name=$StorageAccountName",
+    "-var=storage_container=$ReviewContainer",
+    "-var=state_storage_account_name=$StateStorageAccountName",
+    "-var=state_storage_resource_group_name=$StateStorageResourceGroup",
+    "-var=state_container_name=$StateContainer"
+  )
+
+  $logAnalyticsId = Get-ExistingAzureResourceId -Arguments @(
+    "monitor", "log-analytics", "workspace", "show", "--workspace-name", $LogAnalyticsWorkspaceName, "--resource-group", $ResourceGroup
+  )
+  $applicationInsightsId = Get-ExistingAzureResourceId -Arguments @(
+    "monitor", "app-insights", "component", "show", "--app", $ApplicationInsightsName, "--resource-group", $ResourceGroup
+  )
+  $containerAppId = Get-ExistingAzureResourceId -Arguments @(
+    "containerapp", "show", "--name", $ContainerAppName, "--resource-group", $ResourceGroup
+  )
+  if (-not $containerAppId) {
+    throw "Existing Container App '$ContainerAppName' could not be discovered. Deployment will not create a replacement."
   }
 
+  Import-ExistingTerraformResource -Address "azurerm_log_analytics_workspace.studio" -ResourceId $logAnalyticsId -TerraformVariables $terraformVariables
+  Import-ExistingTerraformResource -Address "azurerm_application_insights.studio" -ResourceId $applicationInsightsId -TerraformVariables $terraformVariables
+  Import-ExistingTerraformResource -Address "azurerm_container_app.studio" -ResourceId $containerAppId -TerraformVariables $terraformVariables
+
   $planPath = Join-Path $PSScriptRoot "local\scrum-studio.tfplan"
-  terraform plan -var-file=$resolvedTfVars -var="container_image=$imageReference" -out=$planPath
+  terraform plan @terraformVariables -out=$planPath
   if ($LASTEXITCODE -ne 0) { throw "Terraform plan failed." }
   Assert-SafeTerraformPlan -PlanPath $planPath
 
@@ -250,6 +309,9 @@ Write-Host "Authentication boundary preserved. Running strict post-deployment ru
   -IdentityName $IdentityName `
   -StorageAccountName $StorageAccountName `
   -ReviewContainer $ReviewContainer `
+  -StateStorageAccountName $StateStorageAccountName `
+  -StateStorageResourceGroup $StateStorageResourceGroup `
+  -StateContainer $StateContainer `
   -AdoOrg $AdoOrg `
   -AdoProject $AdoProject `
   -StrictRuntimeConfiguration | Out-Null

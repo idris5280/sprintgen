@@ -7,8 +7,10 @@ param(
   [string]$ContainerAppName = "ca-scrumstudio",
   [string]$EnvironmentName = "cae-scrumstudio",
   [string]$IdentityName = "umi-scrumstudio",
-  [string]$StorageAccountName = "scrumstudioblob",
+  [string]$StorageAccountName = "sascrumstudio",
   [string]$ReviewContainer = "scrum-studio",
+  [string]$StateStorageAccountName = "sascrumstudio",
+  [string]$StateStorageResourceGroup = "",
   [string]$StateContainer = "scrum-studio-tfstate",
   [string]$AdoOrg = "esiappdev",
   [string]$AdoProject = "Digital Transformation"
@@ -16,6 +18,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+if (-not $StateStorageResourceGroup) { $StateStorageResourceGroup = $ResourceGroup }
 
 function Invoke-AzureJson {
   param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -26,21 +29,22 @@ function Invoke-AzureJson {
   return $output | ConvertFrom-Json
 }
 
-function Ensure-PrivateContainer {
+function Get-PrivateContainer {
   param([string]$StorageId, [string]$Name)
   $id = "$StorageId/blobServices/default/containers/$Name"
-  & az resource show --ids $id --api-version 2023-05-01 --only-show-errors --output none 2>$null
-  if ($LASTEXITCODE -eq 0) {
-    Write-Host "Found private container: $Name"
-    return $id
+  try {
+    $container = Invoke-AzureJson -Arguments @(
+      "resource", "show", "--ids", $id, "--api-version", "2023-05-01"
+    )
+  } catch {
+    throw "Cyber-managed Blob container '$Name' was not found. Ask Cyber to provision it before deployment."
   }
 
-  Write-Host "Creating private container: $Name"
-  $body = '{"properties":{"publicAccess":"None"}}'
-  & az rest --method put --url "https://management.azure.com$id`?api-version=2023-05-01" --body $body --only-show-errors --output none
-  if ($LASTEXITCODE -ne 0) {
-    throw "Could not create Blob container $Name. Ask an Azure administrator to create it privately."
+  $publicAccess = [string]$container.properties.publicAccess
+  if ($publicAccess -and $publicAccess -ne "None") {
+    throw "Cyber-managed Blob container '$Name' permits public access ('$publicAccess'). It must be private before deployment."
   }
+  Write-Host "Found Cyber-managed private container: $Name"
   return $id
 }
 
@@ -59,9 +63,14 @@ $containerApp = Invoke-AzureJson -Arguments @("containerapp", "show", "--name", 
 $environment = Invoke-AzureJson -Arguments @("containerapp", "env", "show", "--name", $EnvironmentName, "--resource-group", $ResourceGroup)
 $identity = Invoke-AzureJson -Arguments @("identity", "show", "--name", $IdentityName, "--resource-group", $ResourceGroup)
 $storage = Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StorageAccountName, "--resource-group", $ResourceGroup)
+$stateStorage = if ($StateStorageAccountName -eq $StorageAccountName -and $StateStorageResourceGroup -eq $ResourceGroup) {
+  $storage
+} else {
+  Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StateStorageAccountName, "--resource-group", $StateStorageResourceGroup)
+}
 
-$reviewContainerId = Ensure-PrivateContainer -StorageId $storage.id -Name $ReviewContainer
-$stateContainerId = Ensure-PrivateContainer -StorageId $storage.id -Name $StateContainer
+$reviewContainerId = Get-PrivateContainer -StorageId $storage.id -Name $ReviewContainer
+$stateContainerId = Get-PrivateContainer -StorageId $stateStorage.id -Name $StateContainer
 
 $localDirectory = Join-Path $PSScriptRoot "local"
 New-Item -ItemType Directory -Path $localDirectory -Force | Out-Null
@@ -93,7 +102,11 @@ $result = [ordered]@{
     id = $storage.id
     accountUrl = "https://$StorageAccountName.blob.core.windows.net"
     reviewContainerId = $reviewContainerId
-    stateContainerId = $stateContainerId
+  }
+  terraformState = [ordered]@{
+    storageAccount = $StateStorageAccountName
+    resourceGroup = $StateStorageResourceGroup
+    containerId = $stateContainerId
   }
 }
 
@@ -110,7 +123,10 @@ Write-Host "Running the read-only authentication, identity, and RBAC preflight..
   -IdentityName $IdentityName `
   -StorageAccountName $StorageAccountName `
   -ReviewContainer $ReviewContainer `
+  -StateStorageAccountName $StateStorageAccountName `
+  -StateStorageResourceGroup $StateStorageResourceGroup `
+  -StateContainer $StateContainer `
   -AdoOrg $AdoOrg `
   -AdoProject $AdoProject | Out-Null
 
-Write-Host "Next: complete terraform.tfvars with non-secret application values, resolve any preflight warnings with the appropriate administrator, then run Deploy-Azure.ps1."
+Write-Host "Next: complete terraform.tfvars with non-secret application values, resolve any preflight blockers with the appropriate owner, then run Deploy-Azure.ps1."

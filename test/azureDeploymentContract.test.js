@@ -27,14 +27,22 @@ test("Terraform excludes Cyber-managed authentication and preserves shared state
   assert.doesNotMatch(variables, /entra_client_id|entra_group_object_id|easy_auth_client_secret|key_vault_name/);
   assert.match(main, /prevent_destroy\s*=\s*true/);
   assert.match(main, /ignore_changes\s*=\s*\[[\s\S]*secret,[\s\S]*template\[0\]\.container\[0\]\.env/);
+  assert.match(main, /data\s+"azurerm_storage_account"\s+"studio"/);
+  assert.match(main, /data\s+"azurerm_storage_container"\s+"reviews"/);
+  assert.doesNotMatch(main, /resource\s+"(?:azurerm_storage|azurerm_role_assignment|azapi_update_resource)"/);
+  assert.doesNotMatch(variables, /manage_role_assignments/);
 });
 
-test("deployment script rejects authentication changes and verifies the boundary", () => {
+test("deployment script rejects authentication and storage changes and verifies the boundary", () => {
   const deploy = read("infra", "Deploy-Azure.ps1");
 
   assert.match(deploy, /terraform state rm \$address/);
   assert.match(deploy, /azapi_resource\.easy_auth/);
   assert.match(deploy, /Assert-SafeTerraformPlan/);
+  assert.match(deploy, /azurerm_\(storage\|role_assignment\)/);
+  assert.match(deploy, /Import-ExistingTerraformResource/);
+  assert.match(deploy, /azurerm_log_analytics_workspace\.studio/);
+  assert.match(deploy, /azurerm_application_insights\.studio/);
   assert.match(deploy, /authConfigs\/current\?api-version=2025-07-01/);
   assert.match(deploy, /containerapp secret list/);
   assert.match(deploy, /authHash/);
@@ -42,12 +50,16 @@ test("deployment script rejects authentication changes and verifies the boundary
   assert.match(deploy, /-StrictRuntimeConfiguration/);
 });
 
-test("preflight checks Easy Auth group restriction, identity, RBAC, and runtime", () => {
+test("preflight validates externally managed auth, storage, identity, RBAC, and runtime", () => {
   const preflight = read("infra", "Test-AzurePreflight.ps1");
 
   assert.match(preflight, /authConfigs\/current\?api-version=2025-07-01/);
   assert.match(preflight, /PSObject\.Properties\["properties"\]/);
   assert.match(preflight, /defaultAuthorizationPolicy[\s\S]*allowedPrincipals[\s\S]*groups/);
+  assert.match(preflight, /Anonymous access denied/);
+  assert.match(preflight, /Review Blob container/);
+  assert.match(preflight, /Terraform state container/);
+  assert.match(preflight, /Terraform state access/);
   assert.match(preflight, /Managed identity attached/);
   assert.match(preflight, /AcrPull/);
   assert.match(preflight, /Storage Blob Data Contributor/);
@@ -62,7 +74,7 @@ test("preflight checks Easy Auth group restriction, identity, RBAC, and runtime"
   ]) {
     assert.match(preflight, new RegExp(variable));
   }
-  assert.match(preflight, /Azure DevOps administrator must confirm/);
+  assert.match(preflight, /Readers group/);
 });
 
 test("Azure defaults target the confirmed Scrum Studio resources", () => {
@@ -71,6 +83,8 @@ test("Azure defaults target the confirmed Scrum Studio resources", () => {
 
   assert.match(variables, /variable "ado_org"[\s\S]*default\s*=\s*"esiappdev"/);
   assert.match(example, /ado_org\s*=\s*"esiappdev"/);
-  assert.match(example, /storage_account_name\s*=\s*"scrumstudioblob"/);
+  assert.match(example, /storage_account_name\s*=\s*"sascrumstudio"/);
   assert.match(example, /storage_container\s*=\s*"scrum-studio"/);
+  assert.match(example, /state_storage_account_name\s*=\s*"sascrumstudio"/);
+  assert.match(example, /state_container_name\s*=\s*"scrum-studio-tfstate"/);
 });

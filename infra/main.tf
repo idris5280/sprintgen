@@ -22,8 +22,19 @@ data "azurerm_storage_account" "studio" {
   resource_group_name = var.resource_group_name
 }
 
-locals {
-  storage_container_id = "${data.azurerm_storage_account.studio.id}/blobServices/default/containers/${var.storage_container}"
+data "azurerm_storage_container" "reviews" {
+  name               = var.storage_container
+  storage_account_id = data.azurerm_storage_account.studio.id
+}
+
+data "azurerm_storage_account" "state" {
+  name                = var.state_storage_account_name
+  resource_group_name = var.state_storage_resource_group_name
+}
+
+data "azurerm_storage_container" "state" {
+  name               = var.state_container_name
+  storage_account_id = data.azurerm_storage_account.state.id
 }
 
 resource "azurerm_log_analytics_workspace" "studio" {
@@ -42,39 +53,6 @@ resource "azurerm_application_insights" "studio" {
   workspace_id        = azurerm_log_analytics_workspace.studio.id
   application_type    = "web"
   tags                = var.tags
-}
-
-resource "azapi_update_resource" "blob_data_protection" {
-  type        = "Microsoft.Storage/storageAccounts/blobServices@2023-05-01"
-  resource_id = "${data.azurerm_storage_account.studio.id}/blobServices/default"
-  body = {
-    properties = {
-      isVersioningEnabled = true
-      deleteRetentionPolicy = {
-        enabled              = true
-        days                 = 30
-        allowPermanentDelete = false
-      }
-      containerDeleteRetentionPolicy = {
-        enabled = true
-        days    = 30
-      }
-    }
-  }
-}
-
-resource "azurerm_role_assignment" "blob" {
-  count                = var.manage_role_assignments ? 1 : 0
-  scope                = local.storage_container_id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = data.azurerm_user_assigned_identity.studio.principal_id
-}
-
-resource "azurerm_role_assignment" "acr_pull" {
-  count                = var.manage_role_assignments ? 1 : 0
-  scope                = data.azurerm_container_registry.studio.id
-  role_definition_name = "AcrPull"
-  principal_id         = data.azurerm_user_assigned_identity.studio.principal_id
 }
 
 resource "azurerm_container_app" "studio" {
@@ -151,8 +129,6 @@ resource "azurerm_container_app" "studio" {
     }
   }
 
-  depends_on = [azapi_update_resource.blob_data_protection]
-
   # Cyber owns Easy Auth and its credential. Terraform owns only the application
   # runtime and must preserve all existing Container App secrets during updates.
   lifecycle {
@@ -173,7 +149,7 @@ output "managed_identity_principal_id" {
 }
 
 output "storage_container_id" {
-  value = local.storage_container_id
+  value = data.azurerm_storage_container.reviews.id
 }
 
 output "managed_identity_client_id" {
@@ -185,10 +161,10 @@ output "application_insights_connection_string" {
   sensitive = true
 }
 
-output "required_admin_role_assignments" {
-  value = var.manage_role_assignments ? "Managed by Terraform." : "An administrator must grant AcrPull and Storage Blob Data Contributor to ${data.azurerm_user_assigned_identity.studio.name}."
-}
-
 output "authentication_ownership" {
   value = "Container Apps Easy Auth, its Entra registration, authorization group, and credential are externally managed by Cyber and are not owned by this Terraform configuration."
+}
+
+output "storage_ownership" {
+  value = "Storage accounts, containers, protection settings, networking, and RBAC are externally managed by Cyber and are read-only to this Terraform configuration."
 }
