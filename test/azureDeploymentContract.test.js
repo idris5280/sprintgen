@@ -58,6 +58,8 @@ test("preflight validates externally managed auth, storage, identity, RBAC, and 
   assert.match(preflight, /defaultAuthorizationPolicy[\s\S]*allowedPrincipals[\s\S]*groups/);
   assert.match(preflight, /Anonymous access denied/);
   assert.match(preflight, /Review Blob container/);
+  assert.match(preflight, /\$reviewContainerInfo = Get-ContainerInfo/);
+  assert.doesNotMatch(preflight, /\$reviewContainer = Get-ContainerInfo/);
   assert.match(preflight, /Terraform state container/);
   assert.match(preflight, /Terraform state access/);
   assert.match(preflight, /Managed identity attached/);

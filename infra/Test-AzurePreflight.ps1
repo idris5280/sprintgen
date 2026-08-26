@@ -170,16 +170,16 @@ $stateStorage = if ($StateStorageAccountName -eq $StorageAccountName -and $State
 } else {
   Invoke-AzureJson -Arguments @("storage", "account", "show", "--name", $StateStorageAccountName, "--resource-group", $StateStorageResourceGroup)
 }
-$reviewContainer = Get-ContainerInfo -StorageId $storage.id -Name $ReviewContainer
+$reviewContainerInfo = Get-ContainerInfo -StorageId $storage.id -Name $ReviewContainer
 $stateContainerInfo = if ($stateStorage.id -eq $storage.id -and $StateContainer -eq $ReviewContainer) {
-  $reviewContainer
+  $reviewContainerInfo
 } else {
   Get-ContainerInfo -StorageId $stateStorage.id -Name $StateContainer
 }
 
-Add-Check -Name "Review Blob container" -Passed ($reviewContainer.found -and $reviewContainer.private) -Detail $(
-  if (-not $reviewContainer.found) { "Cyber must provision private container '$ReviewContainer' in $StorageAccountName." }
-  elseif (-not $reviewContainer.private) { "Container '$ReviewContainer' permits public access ('$($reviewContainer.publicAccess)'). Cyber must make it private." }
+Add-Check -Name "Review Blob container" -Passed ($reviewContainerInfo.found -and $reviewContainerInfo.private) -Detail $(
+  if (-not $reviewContainerInfo.found) { "Cyber must provision private container '$ReviewContainer' in $StorageAccountName." }
+  elseif (-not $reviewContainerInfo.private) { "Container '$ReviewContainer' permits public access ('$($reviewContainerInfo.publicAccess)'). Cyber must make it private." }
   else { "Cyber-managed container '$ReviewContainer' exists and is private." }
 )
 Add-Check -Name "Terraform state container" -Passed ($stateContainerInfo.found -and $stateContainerInfo.private) -Detail $(
@@ -265,7 +265,7 @@ Add-Check -Name "ACR pull role" -Passed $acrRole -Detail $(
   else { "An Azure RBAC administrator must grant AcrPull to $IdentityName on $RegistryName." }
 )
 
-$blobRole = $reviewContainer.found -and (Test-RoleAssignment -PrincipalId $identity.principalId -Scope $reviewContainer.id -RoleName "Storage Blob Data Contributor")
+$blobRole = $reviewContainerInfo.found -and (Test-RoleAssignment -PrincipalId $identity.principalId -Scope $reviewContainerInfo.id -RoleName "Storage Blob Data Contributor")
 Add-Check -Name "Blob data role" -Passed $blobRole -Detail $(
   if ($blobRole) { "$IdentityName has Storage Blob Data Contributor on $ReviewContainer." }
   else { "Cyber must grant Storage Blob Data Contributor to $IdentityName on '$ReviewContainer' or a parent scope." }
