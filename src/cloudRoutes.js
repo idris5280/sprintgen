@@ -229,7 +229,7 @@ function privateNoStore(req, res, next) {
 function securityHeaders(req, res, next) {
   res.set("X-Content-Type-Options", "nosniff");
   res.set("X-Frame-Options", "SAMEORIGIN");
-  res.set("Referrer-Policy", "no-referrer");
+  res.set("Referrer-Policy", "same-origin");
   res.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
   res.set("Cross-Origin-Resource-Policy", "same-origin");
   res.set("Content-Security-Policy", [

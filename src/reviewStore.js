@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getAzureCredential } = require("./azureIdentity");
+const { logEvent } = require("./logger");
 
 function assertReviewId(reviewId) {
   if (!/^[a-f0-9-]{36}$/i.test(String(reviewId || ""))) {
@@ -87,21 +88,31 @@ class BlobReviewStore {
   }
 
   async listReviews(userId) {
-    const reviews = [];
-    const prefix = `${reviewPrefix(userId)}/`;
+    // reviewPrefix(userId) already ends with "/" when no review id is given.
+    const prefix = reviewPrefix(userId);
+    const blobNames = [];
 
     for await (const item of this.container.listBlobsFlat({ prefix })) {
-      if (!item.name.endsWith("/review.json")) continue;
-
-      try {
-        const review = await this.readReview(userId, item.name.split("/").slice(-2, -1)[0]);
-        reviews.push(review.value);
-      } catch (error) {
-        // A single malformed review should not hide the rest of the user's library.
-      }
+      if (item.name.endsWith("/review.json")) blobNames.push(item.name);
     }
 
-    return reviews.sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    const reviews = await Promise.all(blobNames.map(async (name) => {
+      try {
+        const review = await this.readReview(userId, name.split("/").slice(-2, -1)[0]);
+        return review.value;
+      } catch (error) {
+        // A single malformed review should not hide the rest of the user's library, but it must not vanish silently.
+        logEvent("warn", "review_list_item_skipped", {
+          blob: name,
+          detail: String((error && error.message) || error).slice(0, 300)
+        });
+        return null;
+      }
+    }));
+
+    return reviews
+      .filter(Boolean)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
   }
 
   async readReview(userId, reviewId) {
